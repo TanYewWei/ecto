@@ -21,7 +21,9 @@ defmodule Ecto.Mixfile do
   end
 
   defp deps(:prod) do
-    [ { :poolboy, github: "devinus/poolboy" },
+    [ { :iso8601, github: "seansawyer/erlang_iso8601" },
+      { :poolboy, github: "devinus/poolboy" },
+      { :pooler, github: "seth/pooler" },
       { :postgrex, "~> 0.2.0", github: "ericmj/postgrex", optional: true } ]
   end
 
@@ -32,6 +34,7 @@ defmodule Ecto.Mixfile do
 
   defp envs do
     [ pg: [ test_paths: ["integration_test/pg"] ],
+      riak: [ test_paths: ["integration_test/riak"] ],
       all: [ test_paths: ["test", "integration_test/pg"] ] ]
   end
 end

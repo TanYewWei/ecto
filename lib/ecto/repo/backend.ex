@@ -112,9 +112,9 @@ defmodule Ecto.Repo.Backend do
     adapter.transaction(repo, fun)
   end
 
-  ## Helpers
+  ## Helpers  
 
-  defp parse_url(url) do
+  defp parse_url(url) when is_binary do
     info = URI.parse(url)
 
     unless info.scheme == "ecto" do
@@ -141,6 +141,10 @@ defmodule Ecto.Repo.Backend do
     if info.port, do: opts = [port: info.port] ++ opts
 
     opts ++ query
+  end
+
+  defp parse_url(urls) when is_list(urls) do
+    Enum.map(urls, &parse_url/1)
   end
 
   defp atomize_keys(dict) do
