@@ -1,4 +1,4 @@
-defmodule Ecto.Adapter.Riak.Migration do
+defmodule Ecto.Adapters.Riak.Migration do
   
   def resolve(entity, schema) do
   end

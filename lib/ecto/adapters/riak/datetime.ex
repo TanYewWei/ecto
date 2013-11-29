@@ -1,4 +1,4 @@
-defmodule TywUtil.Datetime do
+defmodule Ecto.Adapters.Riak.Datetime do
   @range_month    1..12
   @range_day      1..31
   @range_hour     0..23
@@ -17,9 +17,18 @@ defmodule TywUtil.Datetime do
   @type datetime  :: {date, time}
   @type timestamp :: {megasec::integer, sec::integer, microsec::integer}
   @type dt        :: date | time | datetime
+  @type ecto_dt   :: Ecto.Datetime
 
-  def parse(x) when is_binary(x) or is_list(x) do
+  @spec parse(binary) :: datetime
+  def parse(x) do
     :iso8601.parse(x)
+  end
+
+  @spec parse_to_ecto_datetime(binary) :: ecto_dt
+  def parse_to_ecto_datetime(x) do
+    {{year, mon, day}, {hour, min, sec}} = parse(x)
+    Ecto.Datetime.new(year: year, month: mon, day: day, 
+                      hour: hour, min: min, sec: sec)
   end
   
   @spec compare(datetime, datetime) :: boolean
@@ -48,31 +57,37 @@ defmodule TywUtil.Datetime do
     {div(sec,1000000), rem(sec,1000000), 0}
   end
   
-  @spec now() :: datetime
-  def now(), do: :calendar.now_to_universal_time(:os.timestamp)
+  @spec now_datetime() :: datetime
+  def now_datetime(), do: :calendar.now_to_universal_time(:os.timestamp)
 
   @spec now_string() :: binary
   def now_string() do
-    to_string(:os.timestamp)
+    datetime_to_string(:os.timestamp)
+  end  
+  
+  @spec datetime_to_string(datetime) :: binary
+  def datetime_to_string({_,_,_}=x) do
+    datetime_to_string({x,{0,0,0}})
   end
   
-  @spec now_unix() :: integer
-  def now_unix() do
-    {mega_sec, sec, _} = :os.timestamp
-    mega_sec * 1000000 + sec
+  def datetime_to_string(x) when is_record(x, Ecto.Datetime) do
+    datetime_to_string({{x.year, x.month, x.day},
+                        {x.hour, x.min, x.second}})
   end
-  
-  @spec to_string(datetime | date) :: binary
-  def to_string({_,_,_}=x), do: to_binary({x,{0,0,0}})
-  def to_string(x) do
+
+  def datetime_to_string(x) do
     :iso8601.format(datetime_to_timestamp(x))
   end
   
   ## ------------------------------------------------------------
   ## Predicates
   ## ------------------------------------------------------------
-  
-  def datetime?(x) do
+
+  def datetime?(x) when is_record(x, Ecto.Datetime) do
+    datetime?({{x.year, x.month, x.day}, {x.hour, x.min, x.second}})
+  end
+
+  def datetime?(x) when is_tuple(x) do
     case x do
       {date, time} ->
         date?(date) && time?(time)
@@ -110,16 +125,5 @@ defmodule TywUtil.Datetime do
   def minute?(x), do: x in @range_min
 
   def second?(x), do: x in @range_sec
-
-  @type msec_unit :: :year | :month | :week | :day | :hour | :minute | :second
-  @spec msec(integer, msec_unit) :: integer
-  def msec(x, :year),   do: msec(x*365, :day)
-  def msec(x, :month),  do: msec(x*30, :day)
-  def msec(x, :week),   do: msec(x*7, :day)
-  def msec(x, :day),    do: msec(x*24, :hour)
-  def msec(x, :hour),   do: msec(x*60, :minute)
-  def msec(x, :minute), do: msec(x*60, :second)
-  def msec(x, :second), do: x*1000
-  def msec(x, _),       do: x
 
 end

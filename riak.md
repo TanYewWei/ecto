@@ -2,6 +2,80 @@
 
 The `riak` branch of the ecto repo implements support for the Riak Adapter.
 
+## Requirements
+
+You will need to be on Riak 2.0, which supports CRDTs and the newly revamped Yokozuna search implementation.
+
+## Architecture
+
+Say we have the following models:
+
+```elixir
+defmodule Post do
+  use Ecto.Model
+
+  queryable "posts" do
+    field :title, :string
+    field :text, :string
+    field :temp, :virtual, default: "temp"
+    field :count, :integer
+    has_many :comments, Comment
+    has_one :permalink, Permalink
+  end
+end
+
+defmodule Comment do
+  use Ecto.Model
+
+  queryable "comments" do
+    field :text, :string
+    field :posted, :datetime
+    field :interval, :interval
+    field :bytes, :binary
+    belongs_to :post, Post
+  end
+end
+
+defmodule Permalink do
+  use Ecto.Model
+
+  queryable "permalinks" do
+    field :url, :string
+    belongs_to :post, Post
+  end
+end
+```
+
+A post object would be transformed to a riak map in the straightforward fashion pseudo-structure.
+
+```
+{
+    "id":  1,
+    "title": "some title",
+    "text": "some source text",
+    "count": 1
+}
+```
+
+A comment object would be transformed to a riak map in the pseudo-structure:
+
+```
+{
+    "id": 1,
+    "text": "some text",
+    "posted": "2014-01-01T01:01:01Z",
+    "interval":  "2014-01-01T01:01:01Z",
+    "bytes": "some binary",
+    "post_id": some_post_pk
+}
+```
+
+Essentially, any association will require that we store the owner id on any `belongs_to` attribute
+
+### Query
+
+Querying will be achieved via standard gets when possible and delegate the heavy lifting to liberal use of Riak Search. This will require the version of search which comes in Riak 2.0
+
 ## Major Changes from Ecto master
 
 1. **Added pooler dependency**
@@ -35,6 +109,13 @@ The `riak` branch of the ecto repo implements support for the Riak Adapter.
     * Everytime an Entity is read, we check to ensure that it is of the latest version, and if not, intiate the migration process. The update WILL NOT be sent back to riak until the entity is explictly written back to Riak.
 
     * Everytime we attempt an Entity update, we check to see if the version is the latest, and perform migration if needed.
+
+
+5. **Modification of primary_key is (currently) not allowed**
+
+    It is recommended that you override the primary key to be a random `:string` type.
+
+    After being assigned, the field name of the primary key cannot be changed.
 
 ## Things that would be nice
 

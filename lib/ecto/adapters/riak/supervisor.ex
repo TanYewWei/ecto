@@ -1,4 +1,4 @@
-defmodule Ecto.Adapter.Riak.Supervisor do
+defmodule Ecto.Adapters.Riak.Supervisor do
   use Supervisor.Behaviour
 
   alias Ecto.Adapter.Riak.SchemaCheck
@@ -82,20 +82,6 @@ defmodule Ecto.Adapter.Riak.Supervisor do
       _    -> {:error, :failed_start_pools}
     end
   end
-
-  @doc """
-  Disconnects all workers in the pool group
-  """
-  @spec disconnect(atom) :: :ok
-  def disconnect(pool_group) do
-    case Pool.take_group_member(pool_group) do
-      {pool_name, _} ->
-        Pool.rm_pool(pool_name)
-        disconnect_worker(pool_group)
-      _ ->
-        :ok
-    end
-  end      
   
   defp check_schema(state) do
     state

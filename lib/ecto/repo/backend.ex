@@ -114,7 +114,7 @@ defmodule Ecto.Repo.Backend do
 
   ## Helpers  
 
-  defp parse_url(url) when is_binary do
+  defp parse_url(url) when is_binary(url) do
     info = URI.parse(url)
 
     unless info.scheme == "ecto" do

@@ -7,6 +7,7 @@ defmodule Ecto.Adapters.Riak do
 
   @bucket_name  "50"
   @bucket_type  "map"
+  @datatype_update_options [:create, :return_body]
 
   alias Ecto.Query.Query
   alias Ecto.Query.QueryExpr
@@ -26,7 +27,7 @@ defmodule Ecto.Adapters.Riak do
   defmacro __using__(_opts) do
     quote do
       def __riak__(:pool_group) do
-        __MODULE__.Pool
+        __MODULE__.PoolGroup
       end
 
       def __riak__(:schema) do
@@ -48,7 +49,7 @@ defmodule Ecto.Adapters.Riak do
         ## opts is a list of ListDicts
         Enum.map(opts, &(pool_opt(repo, &1)))
       _ ->
-        [ parse_opt(repo_opts) ]
+        [ pool_opt(repo, opts) ]
     end
   end
 
@@ -86,10 +87,10 @@ defmodule Ecto.Adapters.Riak do
   """
   def create(repo, entity) do
     key = entity.primary_key
-    update = &RiakDatatypes.entity_to_map(json, &1)
-    fun = &Riak.modify_type(&1, update, @bucket_name, key, options)
+    update = &RiakDatatypes.entity_to_map(entity, &1)
+    fun = &Riak.modify_type(&1, update, @bucket_name, key, @datatype_modify_options)
     case use_worker(repo, fun) do
-      
+      _ -> :ok
     end
   end
 
@@ -138,7 +139,7 @@ defmodule Ecto.Adapters.Riak do
         try do
           fun.(worker)
         after
-          Pool.return_member(name, pid, :ok)
+          Pool.return_member(name, worker, :ok)
         end
       rsn ->
         { :error, rsn }

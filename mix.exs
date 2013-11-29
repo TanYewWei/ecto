@@ -21,10 +21,15 @@ defmodule Ecto.Mixfile do
   end
 
   defp deps(:prod) do
-    [ { :iso8601, github: "seansawyer/erlang_iso8601" },
-      { :poolboy, github: "devinus/poolboy" },
-      { :pooler, github: "seth/pooler" },
-      { :postgrex, "~> 0.2.0", github: "ericmj/postgrex", optional: true } ]
+    [ { :poolboy, github: "devinus/poolboy" },
+      { :postgrex, "~> 0.2.0", github: "ericmj/postgrex", optional: true },
+     
+      ## Riak dependencies
+      { :ej, github: "seth/ej", optional: true },
+      { :iso8601, github: "seansawyer/erlang_iso8601", compile: "rebar compile", optional: true },
+      { :jiffy, github: "davisp/jiffy", optional: true },
+      { :pooler, github: "seth/pooler" , optional: true },
+      { :riakc, github: "basho/riak-erlang-client", optional: true } ]
   end
 
   defp deps(_) do

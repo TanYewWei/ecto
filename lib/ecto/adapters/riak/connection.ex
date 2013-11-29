@@ -1,4 +1,4 @@
-defmodule Ecto.Adapter.Riak.Connection do
+defmodule Ecto.Adapters.Riak.Connection do
 
   @doc "Reloads "
   def reload_config(opts) do
@@ -51,7 +51,7 @@ defmodule Ecto.Adapter.Riak.Connection do
     end
   end
 
-  @spec pool() :: {name, pid}
+  @spec pool() :: {atom, pid}
   def pool() do
     case Pool.take_group_member(@pool_group) do
       {name, pid} when is_atom(name) and is_pid(pid) ->
