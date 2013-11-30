@@ -47,7 +47,7 @@ defmodule Ecto.RepoTest do
   test "repo validates query" do
     import Ecto.Query
 
-    assert_raise Ecto.TypeCheckError, fn ->
+    assert_raise Ecto.Query.TypeCheckError, fn ->
       MyRepo.all(from(m in MyModel, select: m.x + 1))
     end
   end
@@ -111,24 +111,24 @@ defmodule Ecto.RepoTest do
 
   test "repo validates update_all" do
     query = from(e in MyModel, select: e)
-    assert_raise Ecto.InvalidQuery, fn ->
+    assert_raise Ecto.QueryError, fn ->
       MyRepo.update_all(query, [])
     end
 
     query = from(e in MyModel, order_by: e.x)
-    assert_raise Ecto.InvalidQuery, fn ->
+    assert_raise Ecto.QueryError, fn ->
       MyRepo.update_all(query, [])
     end
 
-    assert_raise Ecto.InvalidQuery, fn ->
+    assert_raise Ecto.QueryError, fn ->
       MyRepo.update_all(p in MyModel, y: "123")
     end
 
-    assert_raise Ecto.InvalidQuery, fn ->
+    assert_raise Ecto.QueryError, fn ->
       MyRepo.update_all(p in MyModel, x: 123)
     end
 
-    assert_raise Ecto.InvalidQuery, fn ->
+    assert_raise Ecto.QueryError, fn ->
       MyRepo.update_all(e in MyModel, [])
     end
 
@@ -142,12 +142,12 @@ defmodule Ecto.RepoTest do
 
   test "repo validates delete_all" do
     query = from(e in MyModel, select: e)
-    assert_raise Ecto.InvalidQuery, fn ->
+    assert_raise Ecto.QueryError, fn ->
       MyRepo.delete_all(query)
     end
 
     query = from(e in MyModel, order_by: e.x)
-    assert_raise Ecto.InvalidQuery, fn ->
+    assert_raise Ecto.QueryError, fn ->
       MyRepo.delete_all(query)
     end
 
