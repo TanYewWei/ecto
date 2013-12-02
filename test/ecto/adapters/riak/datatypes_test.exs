@@ -1,4 +1,5 @@
 defmodule Ecto.Adapters.Riak.DatatypesTest do
+  use ExUnit.Case, async: true
 
   test "entity_to_map and map_to_entity" do
   end

@@ -15,12 +15,15 @@ defmodule Ecto.Adapters.Riak do
   alias Ecto.Query.Normalizer
   
   alias Ecto.Adapters.Riak.Connection
+  alias Ecto.Adapters.Riak.Search
   alias Ecto.Adapters.Riak.Supervisor
 
   require :pooler, as: Pool
   require :riakc_pb_socket, as: Riak
 
-  @type repo :: Ecto.Repo.t
+  @type entity      :: Ecto.Entity.t
+  @type primary_key :: binary
+  @type repo        :: Ecto.Repo.t
 
   ## Adapter API
 
@@ -59,7 +62,7 @@ defmodule Ecto.Adapters.Riak do
     pool_name = "riak_#{:crypto.rand_bytes(12) |> :base64.encode}"
     max_count = Keyword.get(opts, :max_count, 10)
     init_count = Keyword.get(opts, :init_count, 2)
-    host = Keyword.get!(opts, :host)
+    host = Keyword.get!(opts, :hostname)
     port = Keyword.get!(opts, :port)
     [name: pool_name,
      group: pool_group,
@@ -78,19 +81,37 @@ defmodule Ecto.Adapters.Riak do
   @doc """
   Fetchs all results from the data store based on the given query.
   """
+  @spec all(Ecto.Repo.t, Ecto.Query.t) :: [Record.t] | no_return
   def all(repo, query) do
+    
+    ## Build query
+    {querystring, search_options} = Search.select(query)
+
+    ## search function
+    search = fn(socket)->
+                 Riak.search(socket, querystring)
+             end
+
+    ## Execute search and parse results
+    case use_worker(repo, search) do
+      _ -> :ok
+    end
   end
 
   @doc """
   Stores a single new entity in the data store. And return a primary key
   if one was created for the entity.
   """
+  def create(repo, entity) :: primary_key
   def create(repo, entity) do
     key = entity.primary_key
     update = &RiakDatatypes.entity_to_map(entity, &1)
     fun = &Riak.modify_type(&1, update, @bucket_name, key, @datatype_modify_options)
     case use_worker(repo, fun) do
-      _ -> :ok
+      {:ok, new_datatype} ->
+        :ok
+      _ ->
+        nil
     end
   end
 
@@ -124,7 +145,11 @@ defmodule Ecto.Adapters.Riak do
   entities.
   """
   def delete_all(repo, query) do
-  end  
+  end
+  
+  ## ----------------------------------------------------------------------
+  ## Internal Query Functions
+  ## ----------------------------------------------------------------------
 
   ## ----------------------------------------------------------------------
   ## Worker Pools
