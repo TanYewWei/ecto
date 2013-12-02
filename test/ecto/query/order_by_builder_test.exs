@@ -2,14 +2,15 @@ defmodule Ecto.Query.OrderByBuilderTest do
   use ExUnit.Case, async: true
 
   import Ecto.Query.OrderByBuilder
+  doctest Ecto.Query.OrderByBuilder
 
   test "escape" do
     varx = { :{}, [], [:&, [], [0]] }
     vary = { :{}, [], [:&, [], [1]] }
-    assert [{ :{}, [], [nil, varx, :y] }] ==
+    assert [{ :{}, [], [:asc, varx, :y] }] ==
            escape(quote do x.y end, [:x])
 
-    assert [{ :{}, [], [nil, varx, :x] }, { :{}, [], [nil, vary, :y] }] ==
+    assert [{ :{}, [], [:asc, varx, :x] }, { :{}, [], [:asc, vary, :y] }] ==
            escape(quote do [x.x, y.y] end, [:x, :y])
 
     assert [{ :{}, [], [:asc, varx, :x] }, { :{}, [], [:desc, vary, :y] }] ==
@@ -26,7 +27,7 @@ defmodule Ecto.Query.OrderByBuilderTest do
       escape(quote do [test: x.y] end, [:x])
     end
 
-    message = "malformed order_by query"
+    message = "malformed `order_by` query expression"
     assert_raise Ecto.QueryError, message, fn ->
       escape(quote do 1 + 2 end, [])
     end

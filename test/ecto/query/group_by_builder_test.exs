@@ -2,6 +2,7 @@ defmodule Ecto.Query.GroupByBuilderTest do
   use ExUnit.Case, async: true
 
   import Ecto.Query.GroupByBuilder
+  doctest Ecto.Query.GroupByBuilder
 
   test "escape" do
     varx = { :{}, [], [:&, [], [0]] }
@@ -22,7 +23,7 @@ defmodule Ecto.Query.GroupByBuilderTest do
       escape(quote do x.y end, [])
     end
 
-    message = "malformed group_by query"
+    message = "malformed `group_by` query expression"
     assert_raise Ecto.QueryError, message, fn ->
       escape(quote do 1 + 2 end, [])
     end

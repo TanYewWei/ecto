@@ -134,7 +134,6 @@ defmodule Ecto.Query do
   alias Ecto.Query.HavingBuilder
   alias Ecto.Query.PreloadBuilder
   alias Ecto.Query.JoinBuilder
-  alias Ecto.Query.Util
 
   @doc false
   defmacro __using__(_) do
@@ -190,28 +189,14 @@ defmodule Ecto.Query do
   Note the variables `p` and `q` must be named as you find more convenient
   as they have no important in the query sent to the database.
   """
-  defmacro from(expr, kw) when is_list(kw) do
+  defmacro from(expr, kw) do
     unless Keyword.keyword?(kw) do
-      raise Ecto.QueryError, reason: "second argument to from has to be a keyword list"
+      raise ArgumentError, reason: "second argument to `from` has to be a keyword list"
     end
 
-    { binds, expr } = FromBuilder.escape(expr)
-    quoted = quote do
-      expr = unquote(expr)
-      Ecto.Query.check_binds(expr, unquote(length(binds)))
-      expr
-    end
-    build_query(quoted, binds, kw)
-  end
-
-  defmacro from(query, expr) do
-    { binds, expr } = FromBuilder.escape(expr)
-
-    quote do
-      query = unquote(query)
-      Ecto.Query.check_binds(query, unquote(length(binds)))
-      Util.merge(query, :from, unquote(expr))
-    end
+    { binds, _ } = FromBuilder.escape(expr)
+    quoted = FromBuilder.build(expr, __CALLER__)
+    build_query(kw, quoted, binds)
   end
 
   @doc """
@@ -229,12 +214,7 @@ defmodule Ecto.Query do
   end
 
   defmacro from(expr) do
-    { binds, expr } = FromBuilder.escape(expr)
-    quote do
-      expr = unquote(expr)
-      Ecto.Query.check_binds(expr, unquote(length(binds)))
-      expr
-    end
+    FromBuilder.build(expr, __CALLER__)
   end
 
   @doc """
@@ -272,40 +252,7 @@ defmodule Ecto.Query do
         |> select([p, c], { p, c })
   """
   defmacro join(query, qual, binding, expr, on // nil) do
-    binding = Util.escape_binding(binding)
-    { expr_bindings, join_expr } = JoinBuilder.escape(expr, binding)
-
-    is_assoc = Ecto.Associations.assoc_join?(join_expr)
-    unless is_assoc == nil?(on) do
-      raise Ecto.QueryError, reason: "`join` expression requires explicit `on` " <>
-        "expression unless association join expression"
-    end
-    if (bind = Enum.first(expr_bindings)) && bind in binding do
-      raise Ecto.QueryError, reason: "variable `#{bind}` is already defined in query"
-    end
-
-    on_expr = if on do
-      binds = binding ++ expr_bindings
-      WhereBuilder.escape(on, binds, bind)
-    end
-
-    quote do
-      query = unquote(query)
-      qual = unquote(qual)
-      join_expr = unquote(join_expr)
-
-      Ecto.Query.check_binds(query, unquote(length(binding)))
-      JoinBuilder.validate_qual(qual)
-      var!(count_entities, Ecto.Query) = Util.count_entities(query)
-
-      if unquote(is_assoc) do
-        join = AssocJoinExpr[qual: qual, expr: join_expr, file: __ENV__.file, line: __ENV__.line]
-      else
-        on = QueryExpr[expr: unquote(on_expr), file: __ENV__.file, line: __ENV__.line]
-        join = JoinExpr[qual: qual, source: join_expr, on: on, file: __ENV__.file, line: __ENV__.line]
-      end
-      Util.merge(query, :join, join)
-    end
+    JoinBuilder.build(query, qual, binding, expr, on, __CALLER__)
   end
 
   @doc """
@@ -344,15 +291,7 @@ defmodule Ecto.Query do
 
   """
   defmacro select(query, binding, expr) do
-    binding = Util.escape_binding(binding)
-    quote do
-      query = unquote(query)
-      Ecto.Query.check_binds(query, unquote(length(binding)))
-
-      select_expr = unquote(SelectBuilder.escape(expr, binding))
-      select = QueryExpr[expr: select_expr, file: __ENV__.file, line: __ENV__.line]
-      Util.merge(query, :select, select)
-    end
+    SelectBuilder.build(query, binding, expr, __CALLER__)
   end
 
   @doc """
@@ -372,15 +311,7 @@ defmodule Ecto.Query do
 
   """
   defmacro where(query, binding, expr) do
-    binding = Util.escape_binding(binding)
-    quote do
-      query = unquote(query)
-      Ecto.Query.check_binds(query, unquote(length(binding)))
-
-      where_expr = unquote(WhereBuilder.escape(expr, binding))
-      where = QueryExpr[expr: where_expr, file: __ENV__.file, line: __ENV__.line]
-      Util.merge(query, :where, where)
-    end
+    WhereBuilder.build(query, binding, expr, __CALLER__)
   end
 
   @doc """
@@ -402,22 +333,16 @@ defmodule Ecto.Query do
 
   """
   defmacro order_by(query, binding, expr)  do
-    binding = Util.escape_binding(binding)
-    quote do
-      query = unquote(query)
-      Ecto.Query.check_binds(query, unquote(length(binding)))
-
-      expr = unquote(OrderByBuilder.escape(expr, binding))
-      order_by = QueryExpr[expr: expr, file: __ENV__.file, line: __ENV__.line]
-      Util.merge(query, :order_by, order_by)
-    end
+    OrderByBuilder.build(query, binding, expr, __CALLER__)
   end
 
   @doc """
   A limit query expression.
 
   Limits the number of rows selected from the result. Can be any expression but
-  have to evaluate to an integer value. It can't include any field.
+  have to evaluate to an integer value and it can't include any field.
+
+  If `limit` is given twice, it overrides the previous value.
 
   ## Keywords examples
 
@@ -428,22 +353,17 @@ defmodule Ecto.Query do
       from(u in User) |> where(u.id == current_user) |> limit(1)
 
   """
-  defmacro limit(query, binding // [], expr) do
-    quote do
-      query = unquote(query)
-      Ecto.Query.check_binds(query, unquote(length(binding)))
-
-      expr = unquote(expr)
-      LimitOffsetBuilder.validate(expr)
-      Util.merge(query, :limit, expr)
-    end
+  defmacro limit(query, expr) do
+    LimitOffsetBuilder.build(:limit, query, expr, __CALLER__)
   end
 
   @doc """
   An offset query expression.
 
   Offsets the number of rows selected from the result. Can be any expression
-  but have to evaluate to an integer value. It can't include any field.
+  but have to evaluate to an integer value and tt can't include any field.
+
+  If `offset` is given twice, it overrides the previous value.
 
   ## Keywords examples
 
@@ -455,15 +375,8 @@ defmodule Ecto.Query do
       from(p in Post) |> limit(10) |> offset(30)
 
   """
-  defmacro offset(query, binding // [], expr) do
-    quote do
-      query = unquote(query)
-      Ecto.Query.check_binds(query, unquote(length(binding)))
-
-      expr = unquote(expr)
-      LimitOffsetBuilder.validate(expr)
-      Util.merge(query, :offset, expr)
-    end
+  defmacro offset(query, expr) do
+    LimitOffsetBuilder.build(:offset, query, expr, __CALLER__)
   end
 
   @doc """
@@ -493,15 +406,7 @@ defmodule Ecto.Query do
 
   """
   defmacro group_by(query, binding, expr) do
-    binding = Util.escape_binding(binding)
-    quote do
-      query = unquote(query)
-      Ecto.Query.check_binds(query, unquote(length(binding)))
-
-      expr = unquote(GroupByBuilder.escape(expr, binding))
-      group_by = QueryExpr[expr: expr, file: __ENV__.file, line: __ENV__.line]
-      Util.merge(query, :group_by, group_by)
-    end
+    GroupByBuilder.build(query, binding, expr, __CALLER__)
   end
 
   @doc """
@@ -529,15 +434,7 @@ defmodule Ecto.Query do
         |> select([p], count(p.id))
   """
   defmacro having(query, binding, expr) do
-    binding = Util.escape_binding(binding)
-    quote do
-      query = unquote(query)
-      Ecto.Query.check_binds(query, unquote(length(binding)))
-
-      having_expr = unquote(HavingBuilder.escape(expr, binding))
-      having = QueryExpr[expr: having_expr, file: __ENV__.file, line: __ENV__.line]
-      Util.merge(query, :having, having)
-    end
+    HavingBuilder.build(query, binding, expr, __CALLER__)
   end
 
   @doc """
@@ -562,94 +459,69 @@ defmodule Ecto.Query do
 
       from(Post) |> preload(:comments) |> select([p], p)
   """
-  defmacro preload(query, binding // [], expr) do
-    expr = List.wrap(expr)
-    PreloadBuilder.validate(expr)
-    quote do
-      query = unquote(query)
-      Ecto.Query.check_binds(query, unquote(length(binding)))
-
-      preload_expr = unquote(expr)
-      preload = QueryExpr[expr: preload_expr, file: __ENV__.file, line: __ENV__.line]
-      Util.merge(query, :preload, preload)
-    end
+  defmacro preload(query, expr) do
+    PreloadBuilder.build(query, expr, __CALLER__)
   end
-
-  @doc false
-  def check_binds(queryable, count_binds) do
-    query = Ecto.Queryable.to_query(queryable)
-    if count_binds > 1 and count_binds > Util.count_entities(query) do
-      raise Ecto.QueryError, reason: "more binds specified than there are models on query"
-    end
-  end
-
-  defrecord KwState, [:quoted, :binds]
 
   # Builds the quoted code for creating a keyword query
-  defp build_query(quoted, binds, kw) do
-    state = KwState[quoted: quoted, binds: binds]
-    Enum.reduce(kw, state, &build_query_type(&1, &2)).quoted
+
+  @binds    [:where, :select, :order_by, :group_by, :having]
+  @no_binds [:limit, :offset, :preload]
+  @joins    [:join, :inner_join, :left_join, :right_join, :full_join]
+
+  defp build_query([{ type, expr }|t], quoted, binds) when type in @binds do
+    quoted = quote do
+      Ecto.Query.unquote(type)(unquote(quoted), unquote(binds), unquote(expr))
+    end
+    build_query t, quoted, binds
   end
 
-  defp build_query_type({ :from, expr }, KwState[] = state) do
-    { binds, expr } = FromBuilder.escape(expr)
+  defp build_query([{ type, expr }|t], quoted, binds) when type in @no_binds do
+    quoted = quote do
+      Ecto.Query.unquote(type)(unquote(quoted), unquote(expr))
+    end
+    build_query t, quoted, binds
+  end
 
-    Enum.each binds, fn bind ->
-      if bind != :_ and bind in state.binds do
-        raise Ecto.QueryError, reason: "variable `#{bind}` is already defined in query"
+  defp build_query([{ join, expr }|t], quoted, binds) when join in @joins do
+    qual =
+      case join do
+        :join       -> :inner
+        :inner_join -> :inner
+        :left_join  -> :left
+        :right_join -> :right
+        :full_join  -> :full
       end
-    end
 
-    quoted = quote do: Util.merge(unquote(state.quoted), :from, unquote(expr))
-    state.quoted(quoted).binds(state.binds ++ binds)
-  end
-
-  @joins [:join, :inner_join, :left_join, :right_join, :full_join]
-
-  defp build_query_type({ join, expr }, state) when join in @joins do
-    case join do
-      :join       -> build_join(:inner, expr, state)
-      :inner_join -> build_join(:inner, expr, state)
-      :left_join  -> build_join(:left, expr, state)
-      :right_join -> build_join(:right, expr, state)
-      :full_join  -> build_join(:full, expr, state)
-    end
-  end
-
-  defp build_query_type({ :on, expr }, KwState[] = state) do
-    quoted = quote do
-      expr = unquote(WhereBuilder.escape(expr, state.binds))
-      on = QueryExpr[expr: expr, file: __ENV__.file, line: __ENV__.line]
-      Util.merge(unquote(state.quoted), :on, on)
-    end
-    state.quoted(quoted)
-  end
-
-  defp build_query_type({ type, expr }, KwState[] = state) do
-    quoted = quote do
-      Ecto.Query.unquote(type)(unquote(state.quoted), unquote(state.binds), unquote(expr))
-    end
-    state.quoted(quoted)
-  end
-
-  defp build_join(qual, expr, KwState[] = state) do
-    { binds, expr } = JoinBuilder.escape(expr, state.binds)
-    if (bind = Enum.first(binds)) && bind != :_ && bind in state.binds do
-      raise Ecto.QueryError, reason: "variable `#{bind}` is already defined in query"
-    end
-
-    is_assoc = Ecto.Associations.assoc_join?(expr)
+    { t, on } = collect_on(t, nil)
+    { _, new_binds, _ } = JoinBuilder.escape(expr, binds)
 
     quoted = quote do
-      qual = unquote(qual)
-      expr = unquote(expr)
-      if unquote(is_assoc) do
-        join = AssocJoinExpr[qual: qual, expr: expr, file: __ENV__.file, line: __ENV__.line]
-      else
-        join = JoinExpr[qual: qual, source: expr, file: __ENV__.file, line: __ENV__.line]
-      end
-      Util.merge(unquote(state.quoted), :join, join)
+      Ecto.Query.join(unquote(quoted), unquote(qual), unquote(binds),
+                      unquote(expr), unquote(on))
     end
-    state.quoted(quoted).binds(state.binds ++ [bind])
+
+    build_query t, quoted, binds ++ new_binds
   end
+
+  defp build_query([{ :on, _value }|_], _quoted, _binds) do
+    raise Ecto.QueryError,
+      reason: "`on` keyword must immediatelly follow a join"
+  end
+
+  defp build_query([{ key, _value }|_], _quoted, _binds) do
+    raise Ecto.QueryError,
+      reason: "unsupported #{inspect key} in keyword query expression"
+  end
+
+  defp build_query([], quoted, _binds) do
+    quoted
+  end
+
+  defp collect_on([{ :on, expr }|t], nil),
+    do: collect_on(t, expr)
+  defp collect_on([{ :on, expr }|t], acc),
+    do: collect_on(t, { :and, [], [acc, expr] })
+  defp collect_on(other, acc),
+    do: { other, acc }
 end

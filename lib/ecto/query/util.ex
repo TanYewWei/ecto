@@ -5,8 +5,6 @@ defmodule Ecto.Query.Util do
 
   alias Ecto.Queryable
   alias Ecto.Query.Query
-  alias Ecto.Query.JoinExpr
-  alias Ecto.Query.AssocJoinExpr
 
   @doc """
   Validates the query to check if it is correct. Should be called before
@@ -84,63 +82,18 @@ defmodule Ecto.Query.Util do
   def merge(queryable, type, expr) do
     query = Queryable.to_query(queryable)
 
-    if type == :on do
-      merge_on(query, expr)
-    else
-      check_duplicate(query, type, expr)
-
-      case type do
-        :from     -> query.from(expr)
-        :join     -> query.update_joins(&(&1 ++ [expr]))
-        :where    -> query.update_wheres(&(&1 ++ [expr]))
-        :select   -> query.select(expr)
-        :order_by -> query.update_order_bys(&(&1 ++ [expr]))
-        :limit    -> query.limit(expr)
-        :offset   -> query.offset(expr)
-        :group_by -> query.update_group_bys(&(&1 ++ [expr]))
-        :having   -> query.update_havings(&(&1 ++ [expr]))
-        :preload  -> query.update_preloads(&(&1 ++ [expr]))
-      end
+    case type do
+      :from     -> query.from(expr)
+      :join     -> query.update_joins(&(&1 ++ [expr]))
+      :where    -> query.update_wheres(&(&1 ++ [expr]))
+      :select   -> query.select(expr)
+      :order_by -> query.update_order_bys(&(&1 ++ [expr]))
+      :limit    -> query.limit(expr)
+      :offset   -> query.offset(expr)
+      :group_by -> query.update_group_bys(&(&1 ++ [expr]))
+      :having   -> query.update_havings(&(&1 ++ [expr]))
+      :preload  -> query.update_preloads(&(&1 ++ [expr]))
     end
-  end
-
-  @doc false
-  def merge_on(Query[joins: joins] = query, expr) do
-    case Enum.split(joins, -1) do
-      { joins, [JoinExpr[] = join] } ->
-        joins = joins ++ [join.on(expr)]
-        query.joins(joins)
-      { _, [AssocJoinExpr[]] } ->
-        raise Ecto.QueryError, reason: "an `on` query expression cannot follow an assocation join"
-      _ ->
-        raise Ecto.QueryError, reason: "an `on` query expression must follow a `join`"
-    end
-  end
-
-  # Count the number of entities on the query
-  @doc false
-  def count_entities(queryable) do
-    Query[from: from, joins: joins] = Queryable.to_query(queryable)
-    count = if from, do: 1, else: 0
-    count + length(joins)
-  end
-
-  # Converts list of variables to list of atoms
-  @doc false
-  def escape_binding(binding) when is_list(binding) do
-    vars = Enum.map(binding, &escape_var(&1))
-
-    bound_vars = Enum.filter(vars, &(&1 != :_))
-    dup_vars = bound_vars -- Enum.uniq(bound_vars)
-    unless dup_vars == [] do
-      raise Ecto.QueryError, reason: "variable `#{hd dup_vars}` is already defined in query"
-    end
-
-    vars
-  end
-
-  def escape_binding(_) do
-    raise Ecto.QueryError, reason: "binding should be list of variables"
   end
 
   # Converts internal type format to "typespec" format
@@ -246,30 +199,5 @@ defmodule Ecto.Query.Util do
 
   def locate_var(expr, var) do
     if expr == var, do: []
-  end
-
-  defp escape_var(var) when is_atom(var) do
-    var
-  end
-
-  defp escape_var({ var, _, context }) when is_atom(var) and is_atom(context) do
-    var
-  end
-
-  defp escape_var(_) do
-    raise Ecto.QueryError, reason: "binding should be list of variables"
-  end
-
-  # Check duplicates only for the queries below.
-  lc type inlist [:select, :from, :limit, :offset] do
-    defp check_duplicate(Query[] = left, unquote(type), expr) when not nil?(expr) do
-      if left.unquote(type) do
-        raise Ecto.QueryError, reason: "only one #{unquote(type)} expression is allowed in query"
-      end
-    end
-  end
-
-  defp check_duplicate(_left, _type, _expr) do
-    :ok
   end
 end
