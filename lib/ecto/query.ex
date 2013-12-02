@@ -120,8 +120,7 @@ defmodule Ecto.Query do
                    havings: [], preloads: []
 
   defrecord QueryExpr, [:expr, :file, :line]
-  defrecord AssocJoinExpr, [:qual, :expr, :file, :line]
-  defrecord JoinExpr, [:qual, :source, :on, :file, :line]
+  defrecord JoinExpr, [:qual, :source, :on, :file, :line, :assoc]
 
   @type t :: Query.t
 
@@ -455,9 +454,17 @@ defmodule Ecto.Query do
         preload: [:comments],
         select: p)
 
+      # Returns all posts and their associated comments
+      # with the associated author
+      from(p in Post,
+        preload: [user: [], comments: [:user]],
+        select: p)
+
   ## Expressions examples
 
       from(Post) |> preload(:comments) |> select([p], p)
+
+      from(Post) |> preload([:user, { :comments, [:user] }]) |> select([p], p)
   """
   defmacro preload(query, expr) do
     PreloadBuilder.build(query, expr, __CALLER__)
@@ -494,14 +501,14 @@ defmodule Ecto.Query do
       end
 
     { t, on } = collect_on(t, nil)
-    { _, new_binds, _ } = JoinBuilder.escape(expr, binds)
+    { join_bind, _, _ } = JoinBuilder.escape(expr, binds)
 
     quoted = quote do
       Ecto.Query.join(unquote(quoted), unquote(qual), unquote(binds),
                       unquote(expr), unquote(on))
     end
 
-    build_query t, quoted, binds ++ new_binds
+    build_query t, quoted, binds ++ List.wrap(join_bind)
   end
 
   defp build_query([{ :on, _value }|_], _quoted, _binds) do
