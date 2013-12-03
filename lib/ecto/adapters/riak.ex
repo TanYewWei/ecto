@@ -145,11 +145,7 @@ defmodule Ecto.Adapters.Riak do
   entities.
   """
   def delete_all(repo, query) do
-  end
-  
-  ## ----------------------------------------------------------------------
-  ## Internal Query Functions
-  ## ----------------------------------------------------------------------
+  end  
 
   ## ----------------------------------------------------------------------
   ## Worker Pools
@@ -167,7 +163,7 @@ defmodule Ecto.Adapters.Riak do
           Pool.return_member(name, worker, :ok)
         end
       rsn ->
-        { :error, rsn }
+        {:error, rsn}
     end
   end
 

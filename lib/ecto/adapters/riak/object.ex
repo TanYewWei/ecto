@@ -62,21 +62,21 @@ defmodule Ecto.Adapter.Riak.Object do
 
     ## Map over json values and create statebox update operations.
     ## Note that we never create nested JSON objects from Ecto entities.
-    ops = List.foldr(inner,
-                     [],
-                     fn({k,v}, acc)->
-                         case k do
-                           "_ts" ->
-                             acc
-                           _ ->
-                             if is_list(v) do
-                               ## add-wins behaviour
-                               [:statebox_orddict.f_union(k,v) | acc]
-                             else
-                               [:statebox_orddict.f_store(k,v) | acc]
-                             end
-                         end
-                     end)
+    ops = Enum.reduce(inner,
+                      [],
+                      fn({k,v}, acc)->
+                          case k do
+                            "_ts" ->
+                              acc
+                            _ ->
+                              if is_list(v) do
+                                ## add-wins behaviour
+                                [:statebox_orddict.f_union(k,v) | acc]
+                              else
+                                [:statebox_orddict.f_store(k,v) | acc]
+                              end
+                          end
+                      end)
     statebox.update(ops)
   end
 

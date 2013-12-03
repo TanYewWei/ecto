@@ -6,16 +6,22 @@ defmodule Ecto.Adapters.Riak.Search do
   see -- http://wiki.apache.org/solr/CommonQueryParameters
   """
 
-  alias Ecto.Query.Query
-  alias Ecto.Query.Util
   alias Ecto.Adapters.Riak.SearchResult
+  alias Ecto.Query.Normalizer
+  alias Ecto.Query.Query
+  alias Ecto.Query.QueryExpr
+  alias Ecto.Query.Util  
   
   @type bucket        :: binary
+  @type expr_field    :: atom  ## entity field reference
+  @type expr_var      :: {atom, list, list}
+  @type expr_select   :: {}
+  @type expr_order_by :: {:asc | :desc, expr_var, expr_field}
   @type query         :: Ecto.Query.t
+  @type querystring   :: binary
   @type name          :: {bucket        :: string, 
                           entity_module :: atom,
                           model_module  :: atom}
-  @type querystring   :: binary
   @type search_result :: SearchResult.t
   @type source        :: {{bucket :: string, unique_name :: integer},
                           entity_module :: atom,
@@ -31,11 +37,22 @@ defmodule Ecto.Adapters.Riak.Search do
                        | {:filter, filterquery :: binary}
                        | {:presort, :key | :score}
 
-  @spec select(query) :: {querystring, [search_option]}
-  def select(Query[] = query) do
+  @spec query(query) :: {querystring, [search_option]}
+  def query(Query[] = query) do
     sources = create_names(query)  # :: [source]
 
-    querystring = URI.encode_query([q: 1])
+    select   = select_query(query.select, sources)
+    order_by = order_by(query.order_bys, sources)
+    limit    = limit(query.limit)
+    offset   = limit(query.offset)
+
+    ##querystring = URI.encode_query([q: 1])
+    ## querystring is just the "q" part 
+    ## of the arguments to Yokozuna
+    querystring = ""
+    options = List.flatten([order_by, limit, offset])
+            |> Enum.filter(&(nil != &1))
+    {querystring, options}
   end
 
   defp search_result() do
@@ -50,6 +67,14 @@ defmodule Ecto.Adapters.Riak.Search do
     {"", [name]}
   end
 
+  @spec select(expr_select, [source]) :: {:fl, binary}
+  defp select(expr, sources) do
+    ## Selects various fields from the entity object by using
+    ## the "fl" option to YZ
+    ## doc -- http://wiki.apache.org/solr/CommonQueryParameters#fl
+    QueryExpr[expr: expr] = Normalizer.normalize_select(expr)
+  end
+
   defp join(query, sources, used_names) do
   end
 
@@ -62,7 +87,25 @@ defmodule Ecto.Adapters.Riak.Search do
   defp having(havings, sources) do
   end
 
-  defp order_by() do
+  @spec order_by(expr_order_by, [source]) :: {:sort, binary}
+  defp order_by(order_bys, sources) do
+    ## constructs the "sort" option to Yokozuna
+    ## docs -- http://wiki.apache.org/solr/CommonQueryParameters#sort
+    querystring =
+      Enum.map_join(order_bys, ", ", 
+                    fn(expr)->
+                        Enum.map_join(expr.expr, ", ", &order_by_expr(&1, sources))
+                    end)
+    {:sort, querystring}
+  end
+
+  defp order_by_expr({direction, expr_var, field}, sources) do
+    {_, name} = Util.find_source(sources, expr_var) |> Util.source
+    str = "#{name}.#{field}"
+    str <> case direction do
+             :asc  -> " asc"
+             :desc -> " desc"
+           end
   end
 
   @doc """
