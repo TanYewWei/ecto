@@ -83,21 +83,10 @@ defmodule Ecto.Adapters.Riak do
   """
   @spec all(Ecto.Repo.t, Ecto.Query.t) :: [Record.t] | no_return
   def all(repo, query) do
-    
-    ## Build query
-    {querystring, search_options} = Search.select(query)
-
-    ## search function
-    search = fn(socket)->
-                 Riak.search(socket, querystring)
-             end
-
-    ## Execute search and parse results
-    case use_worker(repo, search) do
-      _ -> :ok
-    end
+    {query_tuple, post_proc_fun} = Search.query(query)
+    use_worker(repo, &Search.execute(&1, query_tuple, post_proc_fun))
   end
-
+  
   @doc """
   Stores a single new entity in the data store. And return a primary key
   if one was created for the entity.
