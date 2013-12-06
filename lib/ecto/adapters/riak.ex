@@ -81,7 +81,7 @@ defmodule Ecto.Adapters.Riak do
   @doc """
   Fetchs all results from the data store based on the given query.
   """
-  @spec all(Ecto.Repo.t, Ecto.Query.t) :: [Record.t] | no_return
+  @spec all(Ecto.Repo.t, Ecto.Query.t) :: [term] | no_return
   def all(repo, query) do
     {query_tuple, post_proc_fun} = Search.query(query)
     use_worker(repo, &Search.execute(&1, query_tuple, post_proc_fun))

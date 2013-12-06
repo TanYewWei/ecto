@@ -6,8 +6,8 @@ defmodule Ecto.Adapters.Riak.Search do
   see -- http://wiki.apache.org/solr/CommonQueryParameters
   """
 
-  alias Ecto.Adapters.Riak.Object
   alias Ecto.Adapters.Riak.Migration
+  alias Ecto.Adapters.Riak.Object
   alias Ecto.Query.Normalizer
   alias Ecto.Query.Query
   alias Ecto.Query.QueryExpr
@@ -23,9 +23,12 @@ defmodule Ecto.Adapters.Riak.Search do
   @type expr_var      :: {atom, list, list}
   @type expr_select   :: {}
   @type expr_order_by :: {:asc | :desc, expr_var, expr_field}
-  @type post_proc_fun :: ((entity) -> term)
+  @type join_type     :: :inner | :left | :right | :full
+  @type join_query    :: binary
+  @type literal       :: term
   @type query         :: Ecto.Query.t
   @type querystring   :: binary
+  @type query_tuple   :: {querystring, [search_option]}
   @type name          :: {bucket        :: binary,
                           entity_module :: atom,
                           model_module  :: atom}
@@ -39,11 +42,14 @@ defmodule Ecto.Adapters.Riak.Search do
                           max_score :: integer,
                           num_found :: integer}
 
-  @type source        :: {{bucket :: string, unique_name :: integer},
+  @type source        :: {{bucket :: binary, unique_name :: integer},
                           entity_module :: atom,
                           model_module  :: atom}
   
-  @type source_tuple  :: tuple  ## tuple of many source types
+  @type source_tuple  :: {{queryable :: binary,  ## the `x` in queryable x do ... end
+                           varname   :: binary}, ## unique query variable
+                          entity     :: atom,    ## entity module
+                          model      :: atom}    ## module module
   @type search_option :: {:index, binary}
                        | {:q, query :: binary}
                        | {:df, default_field :: binary}
@@ -54,6 +60,12 @@ defmodule Ecto.Adapters.Riak.Search do
                        | {:filter, filterquery :: binary}
                        | {:presort, :key | :score}
 
+  ## post processing
+  @type post_proc_fun      :: ((entity) -> term)
+  @type post_proc_group_by :: (([entity]) -> HashDict.t)
+  @type post_proc_having   :: (([entity] | HashDict.t) -> HashDict.t)
+  @type predicate_fun      :: ((term) -> boolean)
+
   ## ----------------------------------------------------------------------
   ## Constants
   ## ----------------------------------------------------------------------
@@ -63,9 +75,116 @@ defmodule Ecto.Adapters.Riak.Search do
   @yz_id_key     "_yz_id"
   @yz_meta_keys  [@yz_bucket_key, @yz_riak_key, @yz_id_key]
 
+  unary_ops = [ -: "-", +: "+" ]
+
+  binary_ops =
+    [ ==: "=", !=: "!=", <=: "<=", >=: ">=", <:  "<", >:  ">",
+      and: "AND", or: "OR",
+      +:  "+", -:  "-", *:  "*",
+      <>: "||", ++: "||",
+      pow: "^", div: "/", rem: "%",
+      date_add: "+", date_sub: "-",
+      ilike: "ILIKE", like: "LIKE" ]
+
+  functions =
+    [ { { :downcase, 1 }, "lower" }, { { :upcase, 1 }, "upper" } ]
+
+  Enum.map(unary_ops, fn { op, str } ->
+    defp translate_name(unquote(op), 1), do: { :unary_op, unquote(str) }
+  end)
+
+  Enum.map(binary_ops, fn { op, str } ->
+    defp translate_name(unquote(op), 2), do: { :binary_op, unquote(str) }
+  end)
+
+  Enum.map(functions, fn { { fun, arity }, str } ->
+    defp translate_name(unquote(fun), unquote(arity)), do: { :fun, unquote(str) }
+  end)
+
+  defp translate_name(fun, _arity), do: { :fun, atom_to_binary(fun) }
+
+  @binary_ops Dict.keys(binary_ops)
+
   ## ----------------------------------------------------------------------
   ## API
   ## ----------------------------------------------------------------------
+  """
+  # Notes on query support
+
+  Order of operations:
+
+  1. form query from any LIMIT, OFFSET, ORDER_BY, and WHERE clauses
+
+  2. for each JOIN clause, construct multiple search queries 
+     to obtain the correct info.
+ 
+  3. generate post-processing function 
+     for dealing with GROUP_BY, HAVING, and SELECT clauses.
+     The order of post-processing is:
+
+     (a) form GROUP_BY groups
+     (b) apply HAVING aggregate functions
+     (c) perform SELECT transformations
+
+  4. Results processing
+     - perform sibling resolution
+     - perform model migration if needed
+     - if there are joins, merge results based on the join
+     - apply the post-processing function from step (3)
+  
+  ----------------------------------------------------------------------
+  Explanation of the query operation semantics follows ...
+  ----------------------------------------------------------------------
+
+  ## FROM
+
+  Riak will only support a single from clause.
+
+
+  ## LIMIT, OFFSET, ORDER BY
+
+  These are supported by YZ, and can work just fine as a straightforward query.
+
+
+  ## WHERE
+
+  The constraints imposed in a where clause are always applied after 
+ 
+  
+  ## GROUP BY and HAVING
+
+  These are going to require post-processing.
+  
+
+
+  ## JOINS are a complicated operation to support
+
+  It is possible to model a join over riak mapreduce,
+  but mapreduce is inefficient, with non-deterministic latency.
+
+  Yokuzuna on the other hand, has no true notion of joins.
+  It does support a join keyword, which only works as a RIGHT OUTER join.
+
+  Essentially, we're left with having to manually manage joins.
+
+  
+  The way that we will approach the problem will be to request all 
+  objects which have either of the models
+  ie: the query 
+  
+    from p in Posts
+      join: c in Comments, on: c.post_id == p.id
+      left_join: lp in p.permalink
+      left_join: lc in c.permalink
+      select: { p.title, lp.link, c.text, lc.link }
+
+  Would first retrieve all Posts (the model in the from clause),
+  and then traverse down to it's associations and fetch objects which require.
+
+  Hence, the query above would require a total of 3 search requests to Riak,
+  collecting the appropriate information along the way.
+
+  """
 
   @doc """
   Constructs a {querystring, [search_option]} tuple which can be
@@ -76,7 +195,11 @@ defmodule Ecto.Adapters.Riak.Search do
   @spec query(query) :: {{querystring, [search_option]}, post_proc_fun}
   def query(Query[] = query) do
     sources = create_names(query)  # :: [source]
+    {_, varnames} = from(query, sources)
 
+    ## joins should not be support
+    join     = join(query)
+    
     select   = select_query(query.select, sources)
     order_by = order_by(query.order_bys, sources)
     limit    = limit(query.limit)
@@ -131,8 +254,8 @@ defmodule Ecto.Adapters.Riak.Search do
         ## Perform any migrations if needed
         migrated = Enum.map(resolved, &Migration.migrate/1)
           
-        ## DONE
-        migrated
+        ## Apply post_proc_fun and we're done
+        Enum.map(migrated, &post_proc_fun.(&1))
       _ ->
         []
     end
@@ -176,13 +299,18 @@ defmodule Ecto.Adapters.Riak.Search do
     {riak_key, json}
   end
   
-  @spec from(name, source_tuple) :: {bucket, [ binary ]}
+  @doc """
+  Constructs a portion of the query which narrows down
+  search objects to be of a particular model,
+  and returns the variable names used in the from query
+  """
+  @spec from(name, source_tuple) :: {bucket, [vars :: binary]}
   defp from(from, sources) do
     from_model = Util.model(from)
     source = tuple_to_list(sources)
              |> Enum.find(&(from_model == Util.model(&1)))
     {bucket, name} = Util.source(source)
-    {"", [name]}
+    {"_model_s:#{from_model}", [name]}
   end
 
   @spec select_query(expr_select, [source]) :: {:fl, binary}
@@ -197,16 +325,103 @@ defmodule Ecto.Adapters.Riak.Search do
   defp select_post_proc(expr, sources) do
   end
 
-  defp join(query, sources, used_names) do
+  ##@spec join(query, term, term) :: {join_type, [join_query]}
+  
+  defp join(query) do
+    case query.joins do
+      [] ->
+        nil
+      _ ->
+        raise Ecto.QueryError, reason: "Riak adapter does not support joins"
+    end
+  end
+  
+  defp join(query, sources, varnames) do
+    sources_list = tuple_to_list(sources)
   end
 
+  @spec where(QueryExpr.t, [source]) :: querystring
   defp where(wheres, sources) do
+    Enum.map_join(wheres,
+                  " ",
+                  fn(QueryExpr[expr: expr])->
+                      expr(expr, sources)
+                  end)
   end
 
-  defp group_by() do
+  @spec group_by(term, [source]) :: post_proc_group_by
+  
+  defp group_by([], _) do
+    ## Empty group_by query should simply return 
+    ## the entire list of entities
+    fn(entities) -> entities end
   end
 
-  defp having(havings, sources) do
+  defp group_by(group_bys, sources) do
+    ## create a post-processing function
+    ## that accumulates values in a HashDict.
+    ## (intended to be called as a function to Enum.reduce/3)
+    ## 
+    ## The hashdict maps tuples of field values
+    ## to a list of entities which have that value.
+    ## eg: grouping by [category_id, title]
+    ##     could result in example groups:
+    ##    { {2, "fruits"}  => [ ... ],
+    ##      {3, "veggies"} => [ ... ],
+    ##      ... }
+    ## 
+    ## An entity should only appear once in this dict
+    
+    fields = Enum.map(group_bys,
+                      fn(expr)->
+                          Enum.map(expr.expr, fn({ var, field })-> field end)
+                      end)
+    fields = Enum.flatten(fields)
+
+    fn(entities)->
+        fun = fn(entity, dict)->
+                  ## Get values using fields to create key tuple
+                  model = elem(entity, 0)
+                  fields = model.__entity__(:entity_kw, entity)
+                  values = Enum.map(fields, fn(x)-> Dict.get(fields, x, nil) end)
+                  key = list_to_tuple(values)
+                  HashDict.update(dict, key, [entity], fn(e)-> [entity | e] end)
+              end
+        Enum.reduce(entities, HashDict.new, fun)
+    end
+  end
+  
+  @spec having([term], [source]) :: post_proc_having
+
+  def having([], _) do
+    fn(entities) -> entities end
+  end
+
+  def having(havings, sources) do
+    ## construct predicate function which gets called
+    ## with an entity argument to determine if that entity
+    ## fits the criteria of all the havings clauses
+    
+    pred = fn(entity)->
+               true
+           end
+
+    ## Construct post proc function
+    fn(entities) ->
+        if is_list(entities) do
+          Enum.map(entities, &having_post_process(&1, pred))
+        else
+          HashDict.values(entities)
+          |> Enum.map(fn(entity_list)->
+                          Enum.map(entity_list, &having_post_process(&1, pred))
+                      end)
+        end
+    end
+  end
+
+  @spec having_post_process(entity, predicate_fun) :: boolean
+  defp having_post_process(entity, pred) do
+    pred.(entity)
   end
 
   @spec order_by(expr_order_by, [source]) :: {:sort, binary}
@@ -222,17 +437,14 @@ defmodule Ecto.Adapters.Riak.Search do
   end
 
   defp order_by_expr({direction, expr_var, field}, sources) do
-    {_, name} = Util.find_source(sources, expr_var) |> Util.source
-    str = "#{name}.#{field}"
+    ##{_, name} = Util.find_source(sources, expr_var) |> Util.source
+    str = "#{field}"
     str <> case direction do
              :asc  -> " asc"
              :desc -> " desc"
            end
   end
 
-  @doc """
-  Adds a 
-  """
   @spec limit(integer) :: search_option
   defp limit(num) when is_integer(num) do
     {:rows, num}
@@ -242,14 +454,19 @@ defmodule Ecto.Adapters.Riak.Search do
     {:start, num}
   end
 
+  ## ----------------------------------------------------------------------
+  ## Variable Handling
+  ## ----------------------------------------------------------------------
+
   @spec create_names(query) :: source_tuple
   defp create_names(query) do
+    ## Creates unique variable names for a query
     sources = query.sources |> tuple_to_list
     Enum.reduce(sources,
                 [],
-                fn({ bucket, entity, model }, acc)->
-                    name = unique_name(acc, String.first(bucket), 0)
-                    [{{bucket,name}, entity, model} | acc]
+                fn({ queryable, entity, model }, acc)->
+                    name = unique_name(acc, String.first(queryable), 0)
+                    [{{queryable,name}, entity, model} | acc]
                 end)
     |> Enum.reverse
     |> list_to_tuple
@@ -263,6 +480,193 @@ defmodule Ecto.Adapters.Riak.Search do
     else
       counted_name
     end
+  end
+
+  ## ----------------------------------------------------------------------
+  ## Function Expressions
+  ## ----------------------------------------------------------------------
+
+  ##@spec expr(literal, [source]) :: binary ## part of a query expression
+
+  ## Field access
+  def fexpr({:., _, [{{:&, _, [_]}=var, field}]}, sources) when is_atom(field) do
+    quote do
+      ##elem(entity, 0).__entity__(:entity_kw, entity) |> Dict.get(field)
+    end
+  end
+
+  ## Negation
+  def fexpr({:!, _, [expr]}, sources) do
+    quote do
+      not expr(unquote(expr), sources)
+    end
+  end  
+  
+  def fexpr({:&, _, [_]}=var, sources) do
+    
+  end
+
+  def fexpr({:==, _, [nil, right]}, sources) do
+    fn()-> right == nil end
+  end
+
+  def fexpr({:==, _, [left, nil]}, sources) do
+    quote do
+      (unquote(left) == nil)
+    end
+  end
+
+  def fexpr({:!=, _, [nil, right]}, sources) do
+    quote do
+      (unquote(right) == nil)
+    end
+  end
+
+  def fexpr({:!=, _, [left, nil]}, sources) do
+    quote do
+      (unquote(left) == nil)
+    end
+  end
+
+  def fexpr(list, sources) when is_list(list) do
+  end
+
+  def fexpr(literal, sources) do
+    quote do
+      literal(unquote(literal))
+    end
+  end
+
+  ## ----------------------------------------------------------------------
+  ## Binary Expressions
+  ## ----------------------------------------------------------------------
+  
+  def expr({:., _, [{:&, _, [_]}=var, field]}, sources) when is_atom(field) do
+    source = Util.find_source(sources, var)
+    entity = Util.entity(source)
+    type = entity.__entity__(:field_type, field)
+    yz_key(field, type)
+  end
+
+  def expr({:!, _, [expr]}, sources) do
+    "-" <> expr(expr, sources)
+  end
+
+  def expr({:&, _, [_]}=var, sources) do
+    ## TODO
+  end
+
+  def expr({:==, _, [nil, right]}, sources) do
+    op_to_binary(right, sources)
+  end
+
+  def expr({:==, _, [left, nil]}, sources) do
+    op_to_binary(left, sources)
+  end
+
+  def expr({:!=, _, [nil, right]}, sources) do
+    op_to_binary(right, sources)
+  end
+
+  def expr({:!=, _, [left, nil]}, sources) do
+    op_to_binary(left, sources)
+  end
+
+  ## element in range
+  def expr({:in, _, [left, Range[first: first, last: last]]}, sources) do
+    field = expr(left, sources)
+    range_start = expr(first, sources)
+    range_end = expr(last, sources)
+    "#{field}:[#{range_start} TO #{range_end}]"
+  end
+
+  ## element in collection
+  def expr({:in, _, [left, right]}, sources) do
+    expr(left, sources) <> ":(" <> expr(right, sources) <> ")"
+  end
+
+  ## range handling
+  def expr(Range[] = range, sources) do
+    expr(Enum.to_list(range), sources)
+  end
+
+  ## range handling
+  def expr({:.., _, [first, last]}, sources) do
+    expr(Enum.to_list(first..last), sources)
+  end
+  
+  ## division (arithmetic)
+  ## use solr "div" function
+  def expr({:/, _, [left, right]}, sources) do
+    "div(#{left}, #{right})"
+  end
+
+  def expr({arg, _, []}, sources) when is_tuple(arg) do
+    expr(arg, sources)
+  end
+
+  def expr({fun, _, args}, sources) when is_atom(fun) and is_list(args) do
+    case translate_name(fun, length(args)) do
+      { :unary_op, op } ->
+        arg = expr(Enum.first(args), sources)
+        op <> arg
+      { :binary_op, op } ->
+        [left, right] = args
+        op_to_binary(left, sources) <> " #{op} " <> op_to_binary(right, sources)
+      { :fun, "localtimestamp" } ->
+        "localtimestamp"
+      { :fun, fun } ->
+        "#{fun}(" <> Enum.map_join(args, ", ", &expr(&1, sources)) <> ")"
+    end
+  end
+
+  def expr(list, sources) when is_list(list) do
+    Enum.map_join(list, " ", &expr(&1, sources))
+  end
+
+  def expr(literal, sources) do
+    literal(literal)
+  end
+
+  ## --------------------
+  ## Operations
+  
+  defp op_to_binary({op, _, [_, _]}=expr, sources) when op in @binary_ops do
+    "(" <> expr(expr, sources) <> ")"
+  end
+
+  defp op_to_binary(expr, sources) do
+    expr(expr, sources)
+  end
+
+  ## --------------------
+  ## Handling of literals
+  @spec literal(term) :: binary
+  
+  defp literal(nil), do: "null"
+
+  defp literal(true), do: "true"
+  
+  defp literal(false), do: "false"
+
+  defp literal(Ecto.DateTime[] = dt) do
+    "#{dt.year}-#{dt.month}-#{dt.day}T#{dt.hour}:#{dt.min}:#{dt.sec}Z"
+  end
+
+  defp literal(Ecto.Interval[] = i) do
+    "#{i.year}-#{i.month}-#{i.day}T#{i.hour}:#{i.min}:#{i.sec}Z"
+  end
+
+  defp literal(Ecto.Binary[value: binary]) do
+    :base64.encode(binary)
+  end
+
+  defp literal(literal) when is_binary(literal) do
+    literal  ## TODO: escaping
+  end
+
+  defp literal(literal) when is_number(literal) do
+    to_string(literal)
   end
 
   ## ----------------------------------------------------------------------
@@ -283,7 +687,7 @@ defmodule Ecto.Adapters.Riak.Search do
   @doc """
   adds a YZ schema suffix to a key depending on its type
   """
-  @spec yz_key(binary, atom) :: binary
+  @spec yz_key(binary, atom | {:list, atom}) :: binary
   def yz_key(key, type) do
     to_string(key) <> "_" <>
       case type do
@@ -307,6 +711,11 @@ defmodule Ecto.Adapters.Riak.Search do
       end
   end
 
+  def yz_key_atom(key, type) do
+    yz_key(key, type) |> to_atom
+  end
+
+  @spec yz_key_type(binary) :: atom | {:list, atom}
   def yz_key_type(key) do
     [suffix] = Regex.run(@yz_key_regex, key)
       |> Enum.filter(&String.starts_with?(&1, "_"))
@@ -336,39 +745,15 @@ defmodule Ecto.Adapters.Riak.Search do
     regex = %r"_[is|fs|bs|ss|b64_ss|dts]$"
     Regex.match?(regex, key)
   end
-  
-end
 
+  defp to_atom(x) when is_atom(x), do: x
 
-defrecord Ecto.Adapters.Riak.SearchResult,
-                             [keys: nil,      ## keys of all found documents
-                              max_score: nil, ## best search score
-                              count: nil,     ## number of results found
-                             ] do
-  @moduledoc """
-  Parses a riak search 
-  """
-  
-  @type t :: Record.t
-  @type riak_search_result :: tuple
-  
-  @spec parse_search_result(riak_search_result) :: t
-  def parse_search_result(result) do
-    {:search_result, docs, max_score, num_found} = result
-
-    ## Get keys.
-    ## Each returned search_doc has format
-    ## {search_index :: binary, properties :: ListDict}
-    ## The key of the document is stored under the "_yz_rk" key
-    ##
-    ## see -- https://github.com/basho/riak-erlang-client/blob/master/include/riakc.hrl
-    keys = Enum.map(docs, fn(doc)->
-                              {_, prop} = doc
-                              Dict.get(prop, "_yz_rk")
-                          end)
-
-    ## Return SearchResult
-    __MODULE__[keys: keys, max_score: max_score, count: num_found]
+  defp to_atom(x) when is_binary(x) do
+    try do
+      binary_to_existing_atom(x)
+    catch
+      _,_ -> binary_to_atom(x)
+    end
   end
-
+  
 end

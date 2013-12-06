@@ -174,7 +174,7 @@ defmodule Ecto.Adapters.Postgres.SQL do
   defp group_by(group_bys, sources) do
     exprs = Enum.map_join(group_bys, ", ", fn(expr) ->
       Enum.map_join(expr.expr, ", ", fn({ var, field }) ->
-        { _, name } = Util.find_source(sources, var) |> Util.source
+        { x, name } = Util.find_source(sources, var) |> Util.source
         "#{name}.#{field}"
       end)
     end)
@@ -183,6 +183,7 @@ defmodule Ecto.Adapters.Postgres.SQL do
   end
 
   defp having(havings, sources) do
+    IO.puts(sources)
     boolean("HAVING", havings, sources)
   end
 

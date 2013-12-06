@@ -40,6 +40,10 @@ defmodule Riak.Adapter.Riak.JSON do
     :ej.delete(keys, json)
   end
 
+  def escape(x) when is_binary(x) do
+    x ##Regex.replace(%r"", x, )
+  end
+
   def valid?(x) do
     case x do
       { inner } ->
