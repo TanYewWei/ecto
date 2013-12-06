@@ -78,7 +78,7 @@ defmodule Ecto.Adapters.Riak.Search do
   unary_ops = [ -: "-", +: "+" ]
 
   binary_ops =
-    [ ==: "=", !=: "!=", <=: "<=", >=: ">=", <:  "<", >:  ">",
+    [ ==: "==", !=: "!=", <=: "<=", >=: ">=", <:  "<", >:  ">",
       and: "AND", or: "OR",
       +:  "+", -:  "-", *:  "*",
       <>: "||", ++: "||",
@@ -195,12 +195,13 @@ defmodule Ecto.Adapters.Riak.Search do
   @spec query(query) :: {{querystring, [search_option]}, post_proc_fun}
   def query(Query[] = query) do
     sources = create_names(query)  # :: [source]
-    {_, varnames} = from(query, sources)
+    {_, varnames} = from(query.from, sources)
 
-    ## joins should not be support
-    join     = join(query)
-    
     select   = select_query(query.select, sources)
+    join     = join(query)  ## not supported
+    where    = where(query.wheres, sources)
+    group_by = group_by(query.group_bys, sources)
+    having   = having(query.havings, sources)    
     order_by = order_by(query.order_bys, sources)
     limit    = limit(query.limit)
     offset   = limit(query.offset)
@@ -212,7 +213,7 @@ defmodule Ecto.Adapters.Riak.Search do
 
     ## querystring is just the "q" part 
     ## of the arguments to Yokozuna
-    querystring = ""
+    querystring = Enum.join([where])
     options = List.flatten([order_by, limit, offset])
       |> Enum.filter(&(nil != &1))
     query_part = {querystring, options}
@@ -318,7 +319,9 @@ defmodule Ecto.Adapters.Riak.Search do
     ## Selects various fields from the entity object by using
     ## the "fl" option to YZ
     ## doc -- http://wiki.apache.org/solr/CommonQueryParameters#fl
-    QueryExpr[expr: expr] = Normalizer.normalize_select(expr)
+    
+    ##QueryExpr[expr: expr] = Normalizer.normalize_select(expr)
+    nil
   end
   
   @spec select_post_proc(expr_select, [source]) :: post_proc_fun
@@ -425,6 +428,9 @@ defmodule Ecto.Adapters.Riak.Search do
   end
 
   @spec order_by(expr_order_by, [source]) :: {:sort, binary}
+  
+  defp order_by([], _), do: nil
+
   defp order_by(order_bys, sources) do
     ## constructs the "sort" option to Yokozuna
     ## docs -- http://wiki.apache.org/solr/CommonQueryParameters#sort
@@ -446,10 +452,12 @@ defmodule Ecto.Adapters.Riak.Search do
   end
 
   @spec limit(integer) :: search_option
+  defp limit(nil), do: nil
   defp limit(num) when is_integer(num) do
     {:rows, num}
   end 
 
+  defp offset(nil), do: nil
   defp offset(num) when is_integer(num) do
     {:start, num}
   end
@@ -459,7 +467,7 @@ defmodule Ecto.Adapters.Riak.Search do
   ## ----------------------------------------------------------------------
 
   @spec create_names(query) :: source_tuple
-  defp create_names(query) do
+  def create_names(query) do
     ## Creates unique variable names for a query
     sources = query.sources |> tuple_to_list
     Enum.reduce(sources,
@@ -539,8 +547,8 @@ defmodule Ecto.Adapters.Riak.Search do
 
   ## ----------------------------------------------------------------------
   ## Binary Expressions
-  ## ----------------------------------------------------------------------
-  
+  ## ---------------------------------------------------------------------- 
+
   def expr({:., _, [{:&, _, [_]}=var, field]}, sources) when is_atom(field) do
     source = Util.find_source(sources, var)
     entity = Util.entity(source)
@@ -557,19 +565,19 @@ defmodule Ecto.Adapters.Riak.Search do
   end
 
   def expr({:==, _, [nil, right]}, sources) do
-    op_to_binary(right, sources)
+    "-" <> expr(right, sources) <> ":*"
   end
 
   def expr({:==, _, [left, nil]}, sources) do
-    op_to_binary(left, sources)
+    "-" <> expr(left, sources) <> ":*"
   end
 
   def expr({:!=, _, [nil, right]}, sources) do
-    op_to_binary(right, sources)
+    expr(right, sources) <> ":*"
   end
 
-  def expr({:!=, _, [left, nil]}, sources) do
-    op_to_binary(left, sources)
+  def expr({:!=, _, [left, nil]}, sources) do 
+    expr(left, sources) <> ":*"
   end
 
   ## element in range
@@ -612,7 +620,26 @@ defmodule Ecto.Adapters.Riak.Search do
         op <> arg
       { :binary_op, op } ->
         [left, right] = args
-        op_to_binary(left, sources) <> " #{op} " <> op_to_binary(right, sources)
+        left_res = op_to_binary(left, sources)
+        right_res = op_to_binary(right, sources)
+        case op do
+          "==" ->
+            left_res <> ":" <> right_res
+          "!=" ->
+            left_res <> ":" <> right_res
+          ">" ->
+            right_res = binary_to_integer(right_res) + 1 |> to_string
+            left_res <> ":[" <> right_res <> " TO *]"
+          ">=" ->
+            left_res <> ":[" <> right_res <> " TO *]"
+          "<" ->
+            right_res = binary_to_integer(right_res) - 1 |> to_string
+            left_res <> ":[* TO " <> right_res <> "]"
+          "<=" ->
+            left_res <> ":[* TO " <> right_res <> "]"
+          _ ->
+            left_res <> " #{op} " <> right_res
+        end
       { :fun, "localtimestamp" } ->
         "localtimestamp"
       { :fun, fun } ->
@@ -631,8 +658,22 @@ defmodule Ecto.Adapters.Riak.Search do
   ## --------------------
   ## Operations
   
-  defp op_to_binary({op, _, [_, _]}=expr, sources) when op in @binary_ops do
-    "(" <> expr(expr, sources) <> ")"
+  defp op_to_binary({op, _, [x, y]}=expr, sources) when op in @binary_ops do
+    case op do
+      :== when x == nil or y == nil ->
+        expr(expr, sources)
+      :== ->
+        "(" <> expr(expr, sources) <> ")"
+      :!= when x == nil or y == nil ->
+        "(" <> expr(expr, sources) <> ")"
+      :!= ->
+        "-(" <> expr(expr, sources) <> ")"
+      # :!= ->
+      #   "-(" <> expr(expr, sources) <> ")"
+      _ ->
+        "(" <> expr(expr, sources) <> ")"
+    end
+    ##expr(expr, sources)
   end
 
   defp op_to_binary(expr, sources) do
@@ -643,7 +684,7 @@ defmodule Ecto.Adapters.Riak.Search do
   ## Handling of literals
   @spec literal(term) :: binary
   
-  defp literal(nil), do: "null"
+  defp literal(nil), do: "*"
 
   defp literal(true), do: "true"
   

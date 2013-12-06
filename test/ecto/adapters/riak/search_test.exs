@@ -2,7 +2,10 @@ defmodule Ecto.Adapters.Riak.Searchtest do
   use ExUnit.Case, async: true
   
   ##require Ecto.Adapters.Riak.Search, as: Search
+  import Ecto.Query
+  import Ecto.Query.Util, only: [normalize: 1]
   alias Ecto.Adapters.Riak.Search
+  alias Ecto.UnitTest.Post
 
   test "function expr" do
     input = {:==, [], [nil, 1]}
@@ -13,18 +16,27 @@ defmodule Ecto.Adapters.Riak.Searchtest do
     ##assert :ok == Search.fexpr(input, [])
   end
 
-  test "expr - x in y" do
-    ## x.state in 1..5
-    input = {:in, [], [{{:., [], [{:&, [], [0]}, :count]}, [], []}, {:.., [], [1, 5]}]}
-    sources = {{{"posts", "p0"}, Ecto.UnitTest.Post.Entity, Ecto.UnitTest.Post.Model}}
-    assert "count_i:(1 2 3 4 5)" == Search.expr(input, sources)
+  test "where expr" do
+    ## == and !=
+    query = (from(p in Post)
+             |> where([c], c.title == "Sweden" and c.text != nil and c.count == nil)
+             |> normalize)
+    {{querystring, options}, post_proc} = Search.query(query)
+    assert "((title_s:Sweden) AND (text_s:*)) AND -count_i:*" == querystring
 
-    input = {:in, [], [1, [1,2,3]]}
-    ##sources = {{{"model", "m0"}, Ecto.Adapters.Postgres.SQLTest.Model.Entity, Ecto.Adapters.Postgres.SQLTest.Model}}
-    assert "1:(1 2 3)" == Search.expr(input, [])
-  end
+    ## <=, >=, <, and >
+    query = (from(p in Post)
+             |> where([p], (p.count > 8 and p.count > 1 and p.count <= 7) or p.count >= 2)
+             |> normalize)
+    {{querystring, options}, post_proc} = Search.query(query)
+    assert "(((count_i:[9 TO *]) AND (count_i:[2 TO *])) AND (count_i:[* TO 7])) OR (count_i:[2 TO *])" == querystring
 
-  test "expr - ranges" do
+    ## x in Range
+    query = (from(p in Post)
+             |> where([p], p.count in 1..5 and nil != p.title)
+             |> normalize)
+    {{querystring, options}, post_proc} = Search.query(query)
+    assert "count_i:(1 2 3 4 5) AND (title_s:*)" == querystring
   end
 
 end
