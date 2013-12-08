@@ -1,10 +1,4 @@
 defmodule Ecto.Adapters.Riak.Datetime do
-  @range_month    1..12
-  @range_day      1..31
-  @range_hour     0..23
-  @range_min      0..59
-  @range_sec      0..59
-  
   @type year      :: non_neg_integer
   @type month     :: non_neg_integer
   @type day       :: non_neg_integer
@@ -116,14 +110,14 @@ defmodule Ecto.Adapters.Riak.Datetime do
 
   def year?(x), do: x > 0
 
-  def month?(x), do: x in @range_month
+  def month?(x), do: x >= 1 && x <= 12
 
-  def day?(x), do: x in @range_day
+  def day?(x), do: x >= 1 && x <= 31
 
-  def hour?(x), do: x in @range_hour
+  def hour?(x), do: x >= 0 && x <= 23
 
-  def minute?(x), do: x in @range_min
+  def minute?(x), do: x >= 0 && x <= 59
 
-  def second?(x), do: x in @range_sec
+  def second?(x), do: x >= 0 && x <= 59
 
 end

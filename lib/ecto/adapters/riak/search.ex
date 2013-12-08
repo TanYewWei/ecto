@@ -75,35 +75,9 @@ defmodule Ecto.Adapters.Riak.Search do
   @yz_id_key     "_yz_id"
   @yz_meta_keys  [@yz_bucket_key, @yz_riak_key, @yz_id_key]
 
-  unary_ops = [ -: "-", +: "+" ]
-
-  binary_ops =
-    [ ==: "==", !=: "!=", <=: "<=", >=: ">=", <:  "<", >:  ">",
-      and: "AND", or: "OR",
-      +:  "+", -:  "-", *:  "*",
-      <>: "||", ++: "||",
-      pow: "^", div: "/", rem: "%",
-      date_add: "+", date_sub: "-",
-      ilike: "ILIKE", like: "LIKE" ]
-
-  functions =
-    [ { { :downcase, 1 }, "lower" }, { { :upcase, 1 }, "upper" } ]
-
-  Enum.map(unary_ops, fn { op, str } ->
-    defp translate_name(unquote(op), 1), do: { :unary_op, unquote(str) }
-  end)
-
-  Enum.map(binary_ops, fn { op, str } ->
-    defp translate_name(unquote(op), 2), do: { :binary_op, unquote(str) }
-  end)
-
-  Enum.map(functions, fn { { fun, arity }, str } ->
-    defp translate_name(unquote(fun), unquote(arity)), do: { :fun, unquote(str) }
-  end)
-
-  defp translate_name(fun, _arity), do: { :fun, atom_to_binary(fun) }
-
-  @binary_ops Dict.keys(binary_ops)
+  @unary_ops  [:-, :+]
+  @binary_ops [:==, :!=, :<=, :>=, :<, :>, :and, :or, :like]
+  @select_ops [:pow, :/, :*, :rem] ++ @binary_ops
 
   ## ----------------------------------------------------------------------
   ## API
@@ -123,7 +97,7 @@ defmodule Ecto.Adapters.Riak.Search do
      The order of post-processing is:
 
      (a) form GROUP_BY groups
-     (b) apply HAVING aggregate functions
+     (b) apply HAVING aggregate functions  (NOT YET IMPLEMENTED)
      (c) perform SELECT transformations
 
   4. Results processing
@@ -155,41 +129,17 @@ defmodule Ecto.Adapters.Riak.Search do
 
   These are going to require post-processing.
   
+  For now, only the group_by clause is supported
 
 
-  ## JOINS are a complicated operation to support
-
-  It is possible to model a join over riak mapreduce,
-  but mapreduce is inefficient, with non-deterministic latency.
-
-  Yokuzuna on the other hand, has no true notion of joins.
-  It does support a join keyword, which only works as a RIGHT OUTER join.
-
-  Essentially, we're left with having to manually manage joins.
-
-  
-  The way that we will approach the problem will be to request all 
-  objects which have either of the models
-  ie: the query 
-  
-    from p in Posts
-      join: c in Comments, on: c.post_id == p.id
-      left_join: lp in p.permalink
-      left_join: lc in c.permalink
-      select: { p.title, lp.link, c.text, lc.link }
-
-  Would first retrieve all Posts (the model in the from clause),
-  and then traverse down to it's associations and fetch objects which require.
-
-  Hence, the query above would require a total of 3 search requests to Riak,
-  collecting the appropriate information along the way.
+  ## JOINS are not supported
 
   """
 
   @doc """
-  Constructs a {querystring, [search_option]} tuple which can be
-  sent to YZ as a search request, and then provides a function 
-  post_proc_fun/1 which should then be called on all results of
+  Constructs a tuple {{querystring, [search_option]}, post_proc_fun}
+  The querystring and search_option are sent to YZ as a search request,
+  where post_proc_fun/1 should  be called on all results of
   the search query in the execute/3 function below.
   """        
   @spec query(query) :: {{querystring, [search_option]}, post_proc_fun}
@@ -207,8 +157,8 @@ defmodule Ecto.Adapters.Riak.Search do
     offset   = limit(query.offset)
 
     select_post_proc = select_post_proc(query.select, sources)
-    post_proc = fn(x)->
-                    select_post_proc.(x)
+    post_proc = fn(entities)->
+                    Enum.map(entities, select_post_proc)
                 end
 
     ## querystring is just the "q" part 
@@ -325,8 +275,111 @@ defmodule Ecto.Adapters.Riak.Search do
   end
   
   @spec select_post_proc(expr_select, [source]) :: post_proc_fun
-  defp select_post_proc(expr, sources) do
+  defp select_post_proc(select, sources) do
+    ## Returns a function that takes an entity,
+    ## extracts the needed fields for the select expression
+    ## and transform it to the appropriate datastructure
+    ##
+    ## Note that because joins are not suppoted in Riak
+    ## you can only perform select transformstions on the 
+    ## model referenced in the `from` clause
+    fn(entity)->
+        select_transform(select.expr, nil, entity)
+    end
   end
+
+  ## select_transform/3 takes an expr 
+  @spec select_transform(tuple, term, entity)
+    :: {transformed :: term, expr_acc :: tuple}
+
+  def select_transform({:{}, _, list}, values, entity) do
+    IO.puts("select_transform tuple")
+    select_transform(list, values, entity)
+    |> list_to_tuple
+  end
+
+  def select_transform({_, _}=tuple, values, entity) do
+    IO.puts("select_transform multi")
+    select_transform(tuple_to_list(tuple), values, entity)
+    |> list_to_tuple
+  end
+
+  def select_transform(list, values, entity) when is_list(list) do
+    IO.puts("select_transform list")
+    res = Enum.map(list,
+             fn(elem)->
+                 select_transform(elem, values, entity)
+             end)
+  end
+
+  def select_transform({{:., _, [{:&, _, [_]}, field]}, _, _}, _, entity) when is_atom(field) do
+    ## attribute accessor
+    IO.puts("select_transform accessor: #{field}")
+    entity_kw = elem(entity, 0).__entity__(:entity_kw, entity)
+    entity_kw[field]
+  end
+
+  def select_transform({:&, _, [_]}=var, _, entity) do
+    IO.puts("select_transform var")
+    entity
+  end
+
+  def select_transform({op, _, args}, acc, entity) when is_atom(op) and op in @unary_ops do
+    arg = select_transform(Enum.first(args), acc, entity)
+    case op do
+      :- ->
+        -1 * arg
+      :+ ->
+        arg
+      _ ->
+        raise Ecto.QueryError, reason: "unsupported select unary op: #{op}"
+    end
+  end
+
+  def select_transform({op, _, [left, right]}, acc, entity)
+  when is_atom(op) and op in @select_ops do
+    IO.puts("select_transform binary op: #{op}")
+    left = select_transform(left, acc, entity)
+    right = select_transform(right, acc, entity)
+    case op do
+      :pow ->
+        :math.pow(left, right)
+      :rem ->
+        rem(left, right)
+      :/ ->
+        left / right
+      :* ->
+        left * right
+      :== ->
+        left == right
+      :!= ->
+        left != right
+      :<= ->
+        left <= right
+      :< ->
+        left < right
+      :>= ->
+        left >= right
+      :> ->
+        left > right
+      :and ->
+        left and right
+      :or ->
+        left or right
+      _ ->
+        raise Ecto.QueryError, reason: "unsupported select binary op: #{op}"
+    end
+  end
+
+  def select_transform(x, _, entity) do
+    IO.puts("select_transform default")
+    x
+  end
+
+  # def select_transform(_, values, entity) do
+  #   [value|values] = values
+  #   {value, values}
+  # end
 
   ##@spec join(query, term, term) :: {join_type, [join_query]}
   
@@ -395,6 +448,15 @@ defmodule Ecto.Adapters.Riak.Search do
   end
   
   @spec having([term], [source]) :: post_proc_having
+
+  def having(havings, _) do
+    case havings do
+      [] ->
+        nil
+      _ ->
+        raise Ecto.QueryError, reason: "Riak adapter does not support having clause"
+    end
+  end
 
   def having([], _) do
     fn(entities) -> entities end
@@ -549,39 +611,40 @@ defmodule Ecto.Adapters.Riak.Search do
   ## Binary Expressions
   ## ---------------------------------------------------------------------- 
 
-  def expr({:., _, [{:&, _, [_]}=var, field]}, sources) when is_atom(field) do
+  defp expr({:., _, [{:&, _, [_]}=var, field]}, sources) when is_atom(field) do
     source = Util.find_source(sources, var)
     entity = Util.entity(source)
     type = entity.__entity__(:field_type, field)
     yz_key(field, type)
   end
 
-  def expr({:!, _, [expr]}, sources) do
+  defp expr({:!, _, [expr]}, sources) do
     "-" <> expr(expr, sources)
   end
 
-  def expr({:&, _, [_]}=var, sources) do
+  ## Variable
+  defp expr({:&, _, [_]}=var, sources) do
     ## TODO
   end
 
-  def expr({:==, _, [nil, right]}, sources) do
+  defp expr({:==, _, [nil, right]}, sources) do
     "-" <> expr(right, sources) <> ":*"
   end
 
-  def expr({:==, _, [left, nil]}, sources) do
+  defp expr({:==, _, [left, nil]}, sources) do
     "-" <> expr(left, sources) <> ":*"
   end
 
-  def expr({:!=, _, [nil, right]}, sources) do
+  defp expr({:!=, _, [nil, right]}, sources) do
     expr(right, sources) <> ":*"
   end
 
-  def expr({:!=, _, [left, nil]}, sources) do 
+  defp expr({:!=, _, [left, nil]}, sources) do 
     expr(left, sources) <> ":*"
   end
 
   ## element in range
-  def expr({:in, _, [left, Range[first: first, last: last]]}, sources) do
+  defp expr({:in, _, [left, Range[first: first, last: last]]}, sources) do
     field = expr(left, sources)
     range_start = expr(first, sources)
     range_end = expr(last, sources)
@@ -589,74 +652,79 @@ defmodule Ecto.Adapters.Riak.Search do
   end
 
   ## element in collection
-  def expr({:in, _, [left, right]}, sources) do
+  defp expr({:in, _, [left, right]}, sources) do
     expr(left, sources) <> ":(" <> expr(right, sources) <> ")"
   end
 
   ## range handling
-  def expr(Range[] = range, sources) do
+  defp expr(Range[] = range, sources) do
     expr(Enum.to_list(range), sources)
   end
 
   ## range handling
-  def expr({:.., _, [first, last]}, sources) do
+  defp expr({:.., _, [first, last]}, sources) do
     expr(Enum.to_list(first..last), sources)
-  end
-  
-  ## division (arithmetic)
-  ## use solr "div" function
-  def expr({:/, _, [left, right]}, sources) do
-    "div(#{left}, #{right})"
+  end 
+
+  defp expr({:/, _, [left, right]}, sources) do
+    raise Ecto.QueryError, reason: "where queries to Riak do not permit the `/` operator"
   end
 
-  def expr({arg, _, []}, sources) when is_tuple(arg) do
+  defp expr({:pow, _, [left, right]}, sources) do
+    raise Ecto.QueryError, reason: "where queries to Riak do not permit the `pow` operator"
+  end
+
+  defp expr({:rem, _, [left, right]}, sources) do
+    raise Ecto.QueryError, reason: "where queries to Riak do not permit the `rem` operator"
+  end
+
+  defp expr({arg, _, []}, sources) when is_tuple(arg) do
     expr(arg, sources)
   end
 
-  def expr({fun, _, args}, sources) when is_atom(fun) and is_list(args) do
-    case translate_name(fun, length(args)) do
-      { :unary_op, op } ->
+  defp expr({fun, _, args}, sources) when is_atom(fun) and is_list(args) do
+    cond do
+      fun in @unary_ops ->
         arg = expr(Enum.first(args), sources)
-        op <> arg
-      { :binary_op, op } ->
+        "#{fun}#{arg}"
+      true ->
         [left, right] = args
         left_res = op_to_binary(left, sources)
         right_res = op_to_binary(right, sources)
-        case op do
-          "==" ->
+        case fun do
+          :== ->
             left_res <> ":" <> right_res
-          "!=" ->
+          :!= ->
             left_res <> ":" <> right_res
-          ">" ->
+          :> ->
             right_res = binary_to_integer(right_res) + 1 |> to_string
             left_res <> ":[" <> right_res <> " TO *]"
-          ">=" ->
+          :>= ->
             left_res <> ":[" <> right_res <> " TO *]"
-          "<" ->
+          :< ->
             right_res = binary_to_integer(right_res) - 1 |> to_string
             left_res <> ":[* TO " <> right_res <> "]"
-          "<=" ->
+          :<= ->
             left_res <> ":[* TO " <> right_res <> "]"
+          :and ->
+            left_res <> " AND " <> right_res
+          :or ->
+            left_res <> " OR " <> right_res
+          :like ->
+            left_res <> ":*" <> right_res <> "*"
           _ ->
-            left_res <> " #{op} " <> right_res
+            raise Ecto.QueryError, reason: "where query unknown function #{fun}"
         end
-      { :fun, "localtimestamp" } ->
-        "localtimestamp"
-      { :fun, fun } ->
-        "#{fun}(" <> Enum.map_join(args, ", ", &expr(&1, sources)) <> ")"
     end
   end
 
-  def expr(list, sources) when is_list(list) do
+  defp expr(list, sources) when is_list(list) do
     Enum.map_join(list, " ", &expr(&1, sources))
   end
 
-  def expr(literal, sources) do
+  defp expr(literal, sources) do
     literal(literal)
   end
-
-  ## --------------------
-  ## Operations
   
   defp op_to_binary({op, _, [x, y]}=expr, sources) when op in @binary_ops do
     case op do
@@ -668,12 +736,9 @@ defmodule Ecto.Adapters.Riak.Search do
         "(" <> expr(expr, sources) <> ")"
       :!= ->
         "-(" <> expr(expr, sources) <> ")"
-      # :!= ->
-      #   "-(" <> expr(expr, sources) <> ")"
       _ ->
         "(" <> expr(expr, sources) <> ")"
     end
-    ##expr(expr, sources)
   end
 
   defp op_to_binary(expr, sources) do

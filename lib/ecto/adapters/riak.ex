@@ -9,6 +9,7 @@ defmodule Ecto.Adapters.Riak do
   @bucket_type  "map"
   @datatype_update_options [:create, :return_body]
 
+  alias Ecto.Associations.Assoc
   alias Ecto.Query.Query
   alias Ecto.Query.QueryExpr
   alias Ecto.Query.Util
@@ -83,8 +84,79 @@ defmodule Ecto.Adapters.Riak do
   """
   @spec all(Ecto.Repo.t, Ecto.Query.t) :: [term] | no_return
   def all(repo, query) do
+    query = query.select |> normalize_select |> query.select
     {query_tuple, post_proc_fun} = Search.query(query)
-    use_worker(repo, &Search.execute(&1, query_tuple, post_proc_fun))
+    entities = use_worker(repo, &Search.execute(&1, query_tuple, post_proc_fun))
+    transformed = Enum.map(entities,
+                           fn(entity)->
+                               values = tuple_to_list(entity)
+                               QueryExpr[expr: expr] = normalize_select(query.select)
+                               transform_row(expr, values, query.sources) |> elem(0)
+                           end)
+    transformed
+      |> Ecto.Associations.Assoc.run(query)
+      |> preload(repo, query)
+  end
+
+  def normalize_select(QueryExpr[expr: { :assoc, _, [_, _] } = assoc] = expr) do
+    normalize_assoc(assoc) |> expr.expr
+  end
+
+  def normalize_select(QueryExpr[expr: _] = expr), do: expr
+
+  defp normalize_assoc({ :assoc, _, [_, _] } = assoc) do
+    { var, fields } = Assoc.decompose_assoc(assoc)
+    normalize_assoc(var, fields)
+  end
+
+  defp normalize_assoc(var, fields) do
+    nested = Enum.map(fields, fn { _field, nested } ->
+      { var, fields } = Assoc.decompose_assoc(nested)
+      normalize_assoc(var, fields)
+    end)
+    { var, nested }
+  end
+
+  defp transform_row({ :{}, _, list }, values, sources) do
+    { result, values } = transform_row(list, values, sources)
+    { list_to_tuple(result), values }
+  end
+
+  defp transform_row({ _, _ } = tuple, values, sources) do
+    { result, values } = transform_row(tuple_to_list(tuple), values, sources)
+    { list_to_tuple(result), values }
+  end
+
+  defp transform_row(list, values, sources) when is_list(list) do
+    { result, values } = Enum.reduce(list, { [], values }, fn elem, { res, values } ->
+      { result, values } = transform_row(elem, values, sources)
+      { [result|res], values }
+    end)
+
+    { Enum.reverse(result), values }
+  end
+
+  defp transform_row({ :&, _, [_] } = var, values, sources) do
+    entity = Util.find_source(sources, var) |> Util.entity
+    entity_size = length(entity.__entity__(:field_names))
+    { entity_values, values } = Enum.split(values, entity_size)
+
+    if Enum.all?(entity_values, &(nil?(&1))) do
+      { nil, values }
+    else
+      { entity.__entity__(:allocate, entity_values), values }
+    end
+  end
+
+  defp transform_row(_, values, _entities) do
+    [value|values] = values
+    { value, values }
+  end
+
+  defp preload(results, repo, Query[] = query) do
+    pos = Util.locate_var(query.select.expr, { :&, [], [0] })
+    fields = Enum.map(query.preloads, &(&1.expr)) |> Enum.concat
+    Ecto.Associations.Preloader.run(results, repo, fields, pos)
   end
   
   @doc """
@@ -102,7 +174,7 @@ defmodule Ecto.Adapters.Riak do
       _ ->
         nil
     end
-  end
+  end  
 
   @doc """
   Updates an entity using the primary key as key.
