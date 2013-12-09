@@ -8,17 +8,8 @@ defmodule Ecto.Adapters.Riak.Searchtest do
   alias Ecto.Adapters.Riak.Datetime
   alias Ecto.UnitTest.Post
 
-  test "function expr" do
-    input = {:==, [], [nil, 1]}
-    fun = Search.fexpr(input, [])
-    assert !fun.()
-
-    ##input = {:&, [], [0]}
-    ##assert :ok == Search.fexpr(input, [])
-  end
-
   defp test_query(query, expected) do
-    {{querystring, _}, _} = Search.query(query |> normalize)
+    {{_, querystring, _}, _} = Search.query(query |> normalize)
     assert expected == querystring
   end
 
@@ -195,10 +186,6 @@ defmodule Ecto.Adapters.Riak.Searchtest do
                 bytes: <<1,2,3>>,
                 posted: Datetime.now_ecto_datetime,
                 post_id: "post_id_0")
-  end
-
-  defp current_datetime() do    
-    Ecto.DateTime.new(year: 2013)
   end
 
 end
