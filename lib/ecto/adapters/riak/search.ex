@@ -6,6 +6,8 @@ defmodule Ecto.Adapters.Riak.Search do
   see -- http://wiki.apache.org/solr/CommonQueryParameters
   """
 
+  alias Ecto.Adapters.Riak.Datetime
+  require Ecto.Adapters.Riak.Datetime
   alias Ecto.Adapters.Riak.Migration
   alias Ecto.Adapters.Riak.Object
   alias Ecto.Query.Normalizer
@@ -74,10 +76,20 @@ defmodule Ecto.Adapters.Riak.Search do
   @yz_riak_key   "_yz_rk"
   @yz_id_key     "_yz_id"
   @yz_meta_keys  [@yz_bucket_key, @yz_riak_key, @yz_id_key]
-
-  @unary_ops  [:-, :+]
-  @binary_ops [:==, :!=, :<=, :>=, :<, :>, :and, :or, :like]
-  @select_ops [:pow, :/, :*, :rem] ++ @binary_ops
+  
+  ## See -- https://github.com/elixir-lang/ecto/blob/master/lib/ecto/query/api.ex
+  ## for api functions to support
+  @where_unary_ops   [:-, :+, :now]
+  @where_binary_ops  [:==, :!=, :<=, :>=, :<, :>, :and, :or, :like, :date_add, :date_sub]
+  @select_funs       [:random, :now, :localtimestamp]
+  @select_unary_ops  [:-, :+, :round,
+                      :downcase, :upcase]
+  @select_binary_ops [:pow, :rem, :/, :*, :+, :-,
+                      :==, :!=, :<=, :<, :>=, :>,
+                      :and, :or,
+                      :<>, :++,
+                      :date_add, :date_sub]
+  @select_aggr_ops   [:avg, :count, :max, :min, :sum]
 
   ## ----------------------------------------------------------------------
   ## API
@@ -143,22 +155,23 @@ defmodule Ecto.Adapters.Riak.Search do
   the search query in the execute/3 function below.
   """        
   @spec query(query) :: {{querystring, [search_option]}, post_proc_fun}
-  def query(Query[] = query) do
+  def query(Query[] = query) do    
     sources = create_names(query)  # :: [source]
     {_, varnames} = from(query.from, sources)
 
     select   = select_query(query.select, sources)
     join     = join(query)  ## not supported
-    where    = where(query.wheres, sources)
-    group_by = group_by(query.group_bys, sources)
-    having   = having(query.havings, sources)    
+    where    = where(query.wheres, sources)    
     order_by = order_by(query.order_bys, sources)
     limit    = limit(query.limit)
     offset   = limit(query.offset)
 
-    select_post_proc = select_post_proc(query.select, sources)
+    group_by_post_proc = group_by(query.group_bys, sources)
+    ##having   = having(query.havings, sources)    
+    select_post_proc  = select_post_proc(query.select, sources)
     post_proc = fn(entities)->
-                    Enum.map(entities, select_post_proc)
+                    group_by_post_proc.(entities)
+                    |> select_post_proc.()
                 end
 
     ## querystring is just the "q" part 
@@ -264,6 +277,10 @@ defmodule Ecto.Adapters.Riak.Search do
     {"_model_s:#{from_model}", [name]}
   end
 
+  ## ----------------------------------------------------------------------
+  ## SELECT
+  ## ----------------------------------------------------------------------
+
   @spec select_query(expr_select, [source]) :: {:fl, binary}
   defp select_query(expr, sources) do
     ## Selects various fields from the entity object by using
@@ -283,73 +300,109 @@ defmodule Ecto.Adapters.Riak.Search do
     ## Note that because joins are not suppoted in Riak
     ## you can only perform select transformstions on the 
     ## model referenced in the `from` clause
-    fn(entity)->
-        select_transform(select.expr, nil, entity)
+    fn(entities)->
+        cond do
+          entities == [] ->
+            []
+          hd(entities) |> is_list ->
+            ## case where we have a group_by or having clause.
+            ## entities :: [ [entity] ]
+            Enum.map(entities, &select_aggregate_transform(select.expr, &1))
+          true ->
+            ## entities :: [entity]
+            Enum.map(entities, &select_transform(select.expr, &1))
+        end
     end
   end
 
   ## select_transform/3 takes an expr 
-  @spec select_transform(tuple, term, entity)
+  @spec select_transform(tuple, entity)
     :: {transformed :: term, expr_acc :: tuple}
 
-  def select_transform({:{}, _, list}, values, entity) do
+  defp select_transform({:{}, _, list}, entity) do
     IO.puts("select_transform tuple")
-    select_transform(list, values, entity)
+    select_transform(list, entity)
     |> list_to_tuple
   end
 
-  def select_transform({_, _}=tuple, values, entity) do
+  defp select_transform({_, _}=tuple, entity) do
     IO.puts("select_transform multi")
-    select_transform(tuple_to_list(tuple), values, entity)
+    select_transform(tuple_to_list(tuple), entity)
     |> list_to_tuple
   end
 
-  def select_transform(list, values, entity) when is_list(list) do
+  defp select_transform(list, entity) when is_list(list) do
     IO.puts("select_transform list")
     res = Enum.map(list,
              fn(elem)->
-                 select_transform(elem, values, entity)
+                 select_transform(elem, entity)
              end)
   end
 
-  def select_transform({{:., _, [{:&, _, [_]}, field]}, _, _}, _, entity) when is_atom(field) do
+  defp select_transform({{:., _, [{:&, _, [_]}, field]}, _, _}, entity) when is_atom(field) do
     ## attribute accessor
-    IO.puts("select_transform accessor: #{field}")
-    entity_kw = elem(entity, 0).__entity__(:entity_kw, entity)
-    entity_kw[field]
+    entity_kw = entity_keyword(entity)
+    value = entity_kw[field]
+    IO.puts("select_transform accessor: #{field} => #{value}")
+    value
   end
 
-  def select_transform({:&, _, [_]}=var, _, entity) do
-    IO.puts("select_transform var")
-    entity
+  defp select_transform({fun, _, _}, entity)
+  when is_atom(fun) and fun in @select_funs do
+    case fun do
+      :random ->
+        :random.uniform
+      :now ->
+        ## GMT timestamp
+        Datetime.now_ecto_datetime()
+      :localtimestamp ->
+        ## timestamp with respect to the current timezone
+        Datetime.now_local_ecto_datetime()
+      _ ->
+        raise Ecto.QueryError, reason: "unsupported select function: #{fun}"
+    end
   end
 
-  def select_transform({op, _, args}, acc, entity) when is_atom(op) and op in @unary_ops do
-    arg = select_transform(Enum.first(args), acc, entity)
+  defp select_transform({op, _, args}, entity)
+  when is_atom(op) and length(args) == 1 and op in @select_unary_ops do
+    IO.puts("select_transform unary op: #{op}")
+    arg = select_transform(Enum.first(args), entity)
     case op do
       :- ->
         -1 * arg
       :+ ->
         arg
+      :round ->
+        Kernel.round(arg)
+      :downcase ->
+        String.downcase(arg)
+      :upcase ->
+        String.upcase(arg)
       _ ->
         raise Ecto.QueryError, reason: "unsupported select unary op: #{op}"
     end
   end
 
-  def select_transform({op, _, [left, right]}, acc, entity)
-  when is_atom(op) and op in @select_ops do
+  defp select_transform({op, _, [left, right]}, entity)
+  when is_atom(op) and op in @select_binary_ops do
     IO.puts("select_transform binary op: #{op}")
-    left = select_transform(left, acc, entity)
-    right = select_transform(right, acc, entity)
+    ##IO.puts(left)
+    ##IO.puts(right)
+    left = select_transform(left, entity)
+    right = select_transform(right, entity)
     case op do
       :pow ->
         :math.pow(left, right)
       :rem ->
         rem(left, right)
+      :+ ->
+        left + right
+      :- ->
+        left - right
       :/ ->
         left / right
       :* ->
-        left * right
+        left * right      
       :== ->
         left == right
       :!= ->
@@ -366,22 +419,89 @@ defmodule Ecto.Adapters.Riak.Search do
         left and right
       :or ->
         left or right
+      :<> ->
+        left <> right
+      :++ ->
+        left ++ right
+      :date_add ->
+        nil
+      :date_sub ->
+        nil
       _ ->
         raise Ecto.QueryError, reason: "unsupported select binary op: #{op}"
     end
   end
 
-  def select_transform(x, _, entity) do
-    IO.puts("select_transform default")
+  defp select_transform({op, _, [left, right]}, entity)
+  when is_atom(op) and op in @select_aggr_ops do
+    
+  end
+
+  defp select_transform({:&, _, [_]}=var, entity) do
+    IO.puts("select_transform var")
+    entity
+  end
+
+  defp select_transform({_, _, args}, entity) do
+    select_transform(args, entity)
+  end
+
+  defp select_transform(x, entity) do
+    IO.puts("select_transform default: #{x}")
     x
   end
 
-  # def select_transform(_, values, entity) do
-  #   [value|values] = values
-  #   {value, values}
-  # end
+  ## -- select aggregate transform --    
 
-  ##@spec join(query, term, term) :: {join_type, [join_query]}
+  defp select_aggregate_transform({op, _, args}, entities)
+  when is_atom(op) and op in @select_aggr_ops do
+    ## first argument of args must be a field accessor
+    {{:., _, [{:&, _, _}, field]}, _, _} = hd(args)
+    
+    ## Extractor functions
+    value_fn = fn(entity)->
+                   entity_kw = entity_keyword(entity)
+                   value = entity_kw[field]
+               end
+    value_type_fn = fn(entity)->
+                        type = entity_field_type(entity, field)
+                    end
+    
+    ## Dispatch
+    case op do
+      :avg ->
+        length = length(entities)
+        sum = Enum.reduce(entities, 0, fn(entity, acc)-> acc + value_fn.(entity) end)
+        sum / length
+      :count ->
+        length(entities)
+      :max ->
+        Enum.map(entities, value_fn)
+        |> Enum.max
+      :min ->
+        Enum.map(entities, value_fn)
+        |> Enum.min
+      :sum ->
+        Enum.reduce(entities, 0, fn(entity, acc)->
+                                     value = value_fn.(entity)
+                                     value = case value_type_fn.(entity) do
+                                               :integer -> round(value)
+                                               :float   -> value
+                                             end
+                                     acc + value
+                                 end)
+      _ ->
+        raise Ecto.QueryError, reason: "unsupported select aggregate op: #{op}"
+    end
+  end
+
+  defp select_aggregate_transform(entities, entity) do
+    :ok
+  end
+
+  ## ----------------------------------------------------------------------
+  ## JOIN
+  ## ----------------------------------------------------------------------
   
   defp join(query) do
     case query.joins do
@@ -396,6 +516,10 @@ defmodule Ecto.Adapters.Riak.Search do
     sources_list = tuple_to_list(sources)
   end
 
+  ## ----------------------------------------------------------------------
+  ## WHERE
+  ## ----------------------------------------------------------------------
+
   @spec where(QueryExpr.t, [source]) :: querystring
   defp where(wheres, sources) do
     Enum.map_join(wheres,
@@ -404,6 +528,10 @@ defmodule Ecto.Adapters.Riak.Search do
                       expr(expr, sources)
                   end)
   end
+
+  ## ----------------------------------------------------------------------
+  ## GROUP BY
+  ## ----------------------------------------------------------------------
 
   @spec group_by(term, [source]) :: post_proc_group_by
   
@@ -432,20 +560,24 @@ defmodule Ecto.Adapters.Riak.Search do
                       fn(expr)->
                           Enum.map(expr.expr, fn({ var, field })-> field end)
                       end)
-    fields = Enum.flatten(fields)
+    fields = List.flatten(fields)
 
     fn(entities)->
         fun = fn(entity, dict)->
                   ## Get values using fields to create key tuple
-                  model = elem(entity, 0)
-                  fields = model.__entity__(:entity_kw, entity)
-                  values = Enum.map(fields, fn(x)-> Dict.get(fields, x, nil) end)
+                  entity_kw = entity_keyword(entity)
+                  values = Enum.map(fields, &(entity_kw[&1]))
                   key = list_to_tuple(values)
                   HashDict.update(dict, key, [entity], fn(e)-> [entity | e] end)
               end
         Enum.reduce(entities, HashDict.new, fun)
+        |> HashDict.values
     end
   end
+
+  ## ----------------------------------------------------------------------
+  ## HAVING
+  ## ----------------------------------------------------------------------
   
   @spec having([term], [source]) :: post_proc_having
 
@@ -488,6 +620,10 @@ defmodule Ecto.Adapters.Riak.Search do
   defp having_post_process(entity, pred) do
     pred.(entity)
   end
+
+  ## ----------------------------------------------------------------------
+  ## ORDER BY, LIMIT, and OFFSET
+  ## ----------------------------------------------------------------------
 
   @spec order_by(expr_order_by, [source]) :: {:sort, binary}
   
@@ -561,7 +697,6 @@ defmodule Ecto.Adapters.Riak.Search do
   ## Field access
   def fexpr({:., _, [{{:&, _, [_]}=var, field}]}, sources) when is_atom(field) do
     quote do
-      ##elem(entity, 0).__entity__(:entity_kw, entity) |> Dict.get(field)
     end
   end
 
@@ -682,36 +817,75 @@ defmodule Ecto.Adapters.Riak.Search do
     expr(arg, sources)
   end
 
-  defp expr({fun, _, args}, sources) when is_atom(fun) and is_list(args) do
-    cond do
-      fun in @unary_ops ->
-        arg = expr(Enum.first(args), sources)
+  defp expr({fun, _, args}, sources) 
+  when is_atom(fun) and is_list(args) and fun in @where_unary_ops do
+    arg = expr(Enum.first(args), sources)
+    case fun do
+      :now ->
+        "NOW"
+      _ ->
         "#{fun}#{arg}"
-      true ->
-        [left, right] = args
-        left_res = op_to_binary(left, sources)
-        right_res = op_to_binary(right, sources)
+    end
+  end    
+
+  defp expr({fun, _, [left, right]}, sources)
+  when is_atom(fun) and fun in @where_binary_ops do
+    cond do
+      ## Datetime operations
+      not Datetime.ecto_timestamp?(left) and Datetime.ecto_timestamp?(right) ->
+        left = op_to_binary(left, sources)
+        right = op_to_binary(right, sources)
         case fun do
           :== ->
-            left_res <> ":" <> right_res
+            left <> ":" <> right
           :!= ->
-            left_res <> ":" <> right_res
+            "-" <> left <> ":" <> right
+          _ ->
+            raise Ecto.QueryError, reason: "where query invalid function #{fun} for right-side datetime"
+        end
+      Datetime.ecto_timestamp?(left) and Datetime.ecto_timestamp?(right) ->
+        case fun do
+          :date_add ->
+            Datetime.solr_datetime(left) <> Datetime.solr_datetime_add(right)
+          :date_sub ->
+            Datetime.solr_datetime(left) <> Datetime.solr_datetime_subtract(right)
+          _ ->
+            raise Ecto.QueryError, reason: "where query invalid function #{fun} for datetime args"
+        end
+      
+      ## Rest
+      true ->
+        left = op_to_binary(left, sources)
+        right = op_to_binary(right, sources)
+        case fun do
+          :== ->
+            left <> ":" <> right
+          :!= ->
+            left <> ":" <> right
           :> ->
-            right_res = binary_to_integer(right_res) + 1 |> to_string
-            left_res <> ":[" <> right_res <> " TO *]"
+            right = try do
+                      binary_to_integer(right) + 1 |> to_string
+                    catch
+                      _,_ -> right
+                    end
+            left <> ":[" <> right <> " TO *]"
           :>= ->
-            left_res <> ":[" <> right_res <> " TO *]"
+            left <> ":[" <> right <> " TO *]"
           :< ->
-            right_res = binary_to_integer(right_res) - 1 |> to_string
-            left_res <> ":[* TO " <> right_res <> "]"
+            right = try do
+                      binary_to_integer(right) - 1 |> to_string
+                    catch
+                      _,_ -> right
+                    end
+            left <> ":[* TO " <> right <> "]"
           :<= ->
-            left_res <> ":[* TO " <> right_res <> "]"
+            left <> ":[* TO " <> right <> "]"
           :and ->
-            left_res <> " AND " <> right_res
+            left <> " AND " <> right
           :or ->
-            left_res <> " OR " <> right_res
+            left <> " OR " <> right
           :like ->
-            left_res <> ":*" <> right_res <> "*"
+            left <> ":*" <> right <> "*"
           _ ->
             raise Ecto.QueryError, reason: "where query unknown function #{fun}"
         end
@@ -724,9 +898,10 @@ defmodule Ecto.Adapters.Riak.Search do
 
   defp expr(literal, sources) do
     literal(literal)
-  end
+  end 
   
-  defp op_to_binary({op, _, [x, y]}=expr, sources) when op in @binary_ops do
+  defp op_to_binary({op, _, [x, y]}=expr, sources) when op in @where_binary_ops do
+    ##if op == :!=, do: IO.puts("#{x}")
     case op do
       :== when x == nil or y == nil ->
         expr(expr, sources)
@@ -736,8 +911,12 @@ defmodule Ecto.Adapters.Riak.Search do
         "(" <> expr(expr, sources) <> ")"
       :!= ->
         "-(" <> expr(expr, sources) <> ")"
+      :date_add -> ## Dates cannot be enclosed in brackets
+        expr(expr, sources)
+      :date_sub ->
+        expr(expr, sources)
       _ ->
-        "(" <> expr(expr, sources) <> ")"
+        "(" <> expr(expr, sources) <> ")"        
     end
   end
 
@@ -756,11 +935,11 @@ defmodule Ecto.Adapters.Riak.Search do
   defp literal(false), do: "false"
 
   defp literal(Ecto.DateTime[] = dt) do
-    "#{dt.year}-#{dt.month}-#{dt.day}T#{dt.hour}:#{dt.min}:#{dt.sec}Z"
+    Datetime.solr_datetime(dt)
   end
 
   defp literal(Ecto.Interval[] = i) do
-    "#{i.year}-#{i.month}-#{i.day}T#{i.hour}:#{i.min}:#{i.sec}Z"
+    Datetime.solr_datetime(i)
   end
 
   defp literal(Ecto.Binary[value: binary]) do
@@ -773,6 +952,18 @@ defmodule Ecto.Adapters.Riak.Search do
 
   defp literal(literal) when is_number(literal) do
     to_string(literal)
+  end
+
+  ## ----------------------------------------------------------------------
+  ## Misc Helpers
+  ## ----------------------------------------------------------------------
+
+  defp entity_keyword(entity) do
+    elem(entity, 0).__entity__(:entity_kw, entity, primary_key: true)
+  end
+
+  defp entity_field_type(entity, field) do
+    elem(entity, 0).__entity__(:field_type, field)
   end
 
   ## ----------------------------------------------------------------------

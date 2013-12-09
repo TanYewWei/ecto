@@ -11,7 +11,7 @@ defmodule Ecto.Adapters.Riak.Datetime do
   @type datetime  :: {date, time}
   @type timestamp :: {megasec::integer, sec::integer, microsec::integer}
   @type dt        :: date | time | datetime
-  @type ecto_dt   :: Ecto.Datetime
+  @type ecto_dt   :: Ecto.Datetime.t
 
   @spec parse(binary) :: datetime
   def parse(x) do
@@ -21,7 +21,7 @@ defmodule Ecto.Adapters.Riak.Datetime do
   @spec parse_to_ecto_datetime(binary) :: ecto_dt
   def parse_to_ecto_datetime(x) do
     {{year, mon, day}, {hour, min, sec}} = parse(x)
-    Ecto.Datetime.new(year: year, month: mon, day: day, 
+    Ecto.DateTime.new(year: year, month: mon, day: day, 
                       hour: hour, min: min, sec: sec)
   end
   
@@ -54,6 +54,12 @@ defmodule Ecto.Adapters.Riak.Datetime do
   @spec now_datetime() :: datetime
   def now_datetime(), do: :calendar.now_to_universal_time(:os.timestamp)
 
+  def now_local_datetime(), do: :calender.now_to_local_time(:os.timestamp)
+
+  def now_ecto_datetime(), do: now_datetime |> to_ecto_datetime
+
+  def now_local_ecto_datetime(), do: now_local_datetime |> to_ecto_datetime
+
   @spec now_string() :: binary
   def now_string() do
     datetime_to_string(:os.timestamp)
@@ -72,13 +78,69 @@ defmodule Ecto.Adapters.Riak.Datetime do
   def datetime_to_string(x) do
     :iso8601.format(datetime_to_timestamp(x))
   end
+
+  @spec to_ecto_datetime(dt) :: ecto_dt
+  def to_ecto_datetime(x) do
+    case x do
+      {{year, mon, day}, {hour, min, sec}} ->
+        Ecto.DateTime.new(year: year, month: mon, day: day, 
+                          hour: hour, min: min, sec: sec)
+      {a, b, c} ->
+        cond do
+          year?(a) && month?(b) && day?(c) ->
+            Ecto.DateTime.new(year: a, month: b, day: c)
+          hour?(a) && minute?(b) && second?(c) ->
+            Ecto.DateTime.new(hour: a, min: b, sec: c)
+          true ->
+            nil
+        end
+      _ ->
+        nil
+    end
+  end
+
+  @spec ecto_datetime_to_datetime(ecto_dt) :: datetime
+  def ecto_datetime_to_datetime(x) do
+    year  = if x.year  != nil, do: x.year,  else: 0
+    month = if x.month != nil, do: x.month, else: 0
+    day   = if x.day   != nil, do: x.day,   else: 0
+    hour  = if x.hour  != nil, do: x.hour,  else: 0
+    min   = if x.min   != nil, do: x.min,   else: 0
+    sec   = if x.sec   != nil, do: x.sec,   else: 0
+    {{year, month, day}, {hour, min, sec}}
+  end  
   
   ## ------------------------------------------------------------
-  ## Predicates
+  ## Predicates and Guards
   ## ------------------------------------------------------------
 
-  def datetime?(x) when is_record(x, Ecto.Datetime) do
-    datetime?({{x.year, x.month, x.day}, {x.hour, x.min, x.second}})
+  defmacro ecto_timestamp?(x) do
+    quote do
+      (is_record(unquote(x), Ecto.DateTime) or is_record(unquote(x), Ecto.Interval))
+    end
+  end
+
+  def ecto_interval?(x) do
+    ## treat nil values as valid
+    if is_record(x, Ecto.Interval) do
+      year  = if x.year  != nil, do: year?(x.year),   else: true
+      month = if x.month != nil, do: month?(x.month), else: true
+      day   = if x.day   != nil, do: day?(x.day),     else: true
+      hour  = if x.hour  != nil, do: hour?(x.hour),   else: true
+      min   = if x.min   != nil, do: minute?(x.min),  else: true
+      sec   = if x.sec   != nil, do: second?(x.sec),  else: true
+      (year && month && day && hour && min && sec)
+    else
+      false
+    end
+  end
+
+  def ecto_datetime?(x) do 
+    if is_record(x, Ecto.Datetime) do
+      datetime?({{x.year, x.month, x.day}, {x.hour, x.min, x.sec}})
+    else
+      false
+    end
   end
 
   def datetime?(x) when is_tuple(x) do
@@ -119,5 +181,53 @@ defmodule Ecto.Adapters.Riak.Datetime do
   def minute?(x), do: x >= 0 && x <= 59
 
   def second?(x), do: x >= 0 && x <= 59
+
+  ## ------------------------------------------------------------
+  ## Solr Specific
+  ## ------------------------------------------------------------
+
+  def solr_datetime(x) when x == "NOW" do
+    solr_datetime(now_datetime)
+  end
+
+  def solr_datetime(x) when is_binary(x), do: x
+
+  def solr_datetime(x) when ecto_timestamp?(x) do
+    ecto_datetime_to_datetime(x) |> solr_datetime
+  end
+
+  def solr_datetime({a, b, c}) do
+    cond do
+      year?(a) && month?(b) && day?(c) ->
+        "#{a}-#{b}-#{c}T00:00:00Z"
+      hour?(a) && minute?(b) && second?(c) ->
+        {{year, month, day}, _} = now_datetime()
+        "#{year}-#{month}-#{day}T#{a}:#{b}:#{c}Z"
+      true ->
+        raise "bad datetime"
+    end
+  end
+
+  def solr_datetime({{year, month, day}, {hour, min, sec}}) do
+    "#{year}-#{month}-#{day}T#{hour}:#{min}:#{sec}Z"
+  end
+
+  @spec solr_datetime_add(dt | ecto_dt) :: binary
+
+  def solr_datetime_add(x) when is_binary(x), do: x
+
+  def solr_datetime_add(x) do
+    {{year, month, day}, {hour, min, sec}} = ecto_datetime_to_datetime(x)
+    "+#{year}YEARS+#{month}MONTHS+#{day}DAYS+#{hour}HOURS+#{min}MINUTES+#{sec}SECONDS"
+  end
+
+  @spec solr_datetime_subtract(dt | ecto_dt) :: binary
+  
+  def solr_datetime_subtract(x) when is_binary(x), do: x
+
+  def solr_datetime_subtract(x) do
+    {{year, month, day}, {hour, min, sec}} = ecto_datetime_to_datetime(x)
+    "-#{year}YEARS-#{month}MONTHS-#{day}DAYS-#{hour}HOURS-#{min}MINUTES-#{sec}SECONDS"
+  end
 
 end

@@ -13,8 +13,10 @@ defmodule Ecto.UnitTest.Post do
   queryable "posts" do
     field :title, :string
     field :text, :string
+    field :posted, :datetime
     field :temp, :virtual, default: "temp"
     field :count, :integer
+    field :rating, :float
     has_many :comments, Ecto.UnitTest.Comment
     has_one :permalink, Ecto.UnitTest.Permalink
   end
