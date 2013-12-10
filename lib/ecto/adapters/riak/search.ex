@@ -154,7 +154,7 @@ defmodule Ecto.Adapters.Riak.Search do
     select_post_proc   = SearchSelect.post_proc(query.select)
     post_proc = fn(entities)->                    
                     group_by_post_proc.(entities)
-                    |> having_post_proc.()
+                    ##|> having_post_proc.()
                     |> select_post_proc.()
                 end
 
@@ -255,6 +255,7 @@ defmodule Ecto.Adapters.Riak.Search do
   @spec from(name, source_tuple) :: {bucket, [vars :: binary]}
   defp from(from, sources) do
     from_model = Util.model(from)
+    IO.puts(to_string from_model)
     source = tuple_to_list(sources)
              |> Enum.find(&(from_model == Util.model(&1)))
     {bucket, name} = Util.source(source)
@@ -278,7 +279,7 @@ defmodule Ecto.Adapters.Riak.Search do
   ## GROUP BY
   ## ----------------------------------------------------------------------
 
-  @spec group_by(term) :: post_proc_group_by
+  @spec group_by(term) :: (([entity] | [[entity]]) -> [entity])
   
   defp group_by([]) do
     ## Empty group_by query should simply return 

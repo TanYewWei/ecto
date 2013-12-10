@@ -1,4 +1,6 @@
 defmodule Ecto.Adapters.Riak.SearchSelect do
+  alias Ecto.Adapters.Riak.SearchUtil
+
   ## Types
   
   @type entity :: Ecto.Entity.t
