@@ -77,21 +77,11 @@ defmodule Ecto.Adapters.Riak.Migration do
   @type store      :: term  ## riak storage format
 
   ## ----------------------------------------------------------------------
-  ## Types
+  ## Constants
   ## ----------------------------------------------------------------------
 
   @default_migrations_dir "priv/repo/migrations/riak"
-
-  @key_migrations_root    "migrations_root"
-  @key_migrations_dir     "default_migrations_dir"
-
-  @after_compile __MODULE__
-
-  def __after_compile__(_, _) do
-    ETS.put(@key_migrations_root, File.cwd!)
-    ETS.put(@key_migrations_dir,
-            Keyword.get(Mix.project, :riak_migrations, @default_migrations_dir))
-  end
+  @key_migrations_dir     "ECTO_RIAK_MIGRATIONS_DIR"
 
   ## ----------------------------------------------------------------------
   ## Callbacks
@@ -167,11 +157,11 @@ defmodule Ecto.Adapters.Riak.Migration do
 
   @doc """
   Predicate telling us whether migrations to newer versions are allowed.
-  This is set to false by default.
+  This is set to true by default.
   """
   @spec migration_up_allowed?() :: boolean
   def migration_up_allowed?() do
-    ETS.get(@migration_up_enabled_key, false) == true
+    ETS.get(@migration_up_enabled_key, true) == true
   end
 
   @doc """
@@ -213,11 +203,15 @@ defmodule Ecto.Adapters.Riak.Migration do
         ## migrate up
         if migration_up_allowed? do
           migrate_up(entity, version)
+        else
+          entity
         end
       version > current ->
         ## migrate down
         if migration_down_allowed? do
           migrate_down(entity, version)
+        else
+          entity
         end
       true ->
         entity
@@ -234,9 +228,9 @@ defmodule Ecto.Adapters.Riak.Migration do
     
     case length(modules) == (version - entity.version + 1) do
       true ->
-        List.foldl(modules, entity, fn(module, acc)->
-                                        module.migrate_up(acc)
-                                    end)
+        List.foldl(modules, 
+                   entity,
+                   fn(module, ent)-> module.migrate_up(ent) end)
       _ ->
         raise "missing migration files"
     end
@@ -252,9 +246,9 @@ defmodule Ecto.Adapters.Riak.Migration do
     
     case length(modules) == (entity.version - version + 1) do
       true ->
-        List.foldl(modules, entity, fn(module, acc)->
-                                        module.migrate_down(acc)
-                                    end)
+        List.foldl(modules,
+                   entity,
+                   fn(module, ent)-> module.migrate_down(ent) end)
       _ ->
         raise "missing migration files"
     end
@@ -321,9 +315,23 @@ defmodule Ecto.Adapters.Riak.Migration do
   and should be a path relative to the root directory of the project
   """
   def migration_dir() do
-    root = ETS.get(@key_migrations_root)
-    dir = ETS.get(@key_migrations_dir)
-    root <> "/" <> dir
+    ## Prefer system env var if present
+    dir = System.get_env(@key_migrations_root)
+
+    ## Then look for key in proplist
+    dir = if nil?(dir) do
+            Keyword.get(Mix.project, :riak_migrations)
+          else
+            dir
+          end
+    
+    ## Else use a default directory
+    dir = if nil?(dir) do
+            root = Regex.split(%r"/_build/.*", Mix.Project.app_path, [trim: true])
+            Path.join(Mix.Project.app_path, @default_migration_dir)
+          else
+            dir
+          end
   end
 
   @doc """
@@ -334,7 +342,7 @@ defmodule Ecto.Adapters.Riak.Migration do
   off before calling this function with a different directory
   """
   def set_migration_dir(dir) when is_binary(dir) do
-    ETS.put(@key_migrations_dir, dir)
+    System.put_env(@key_migrations_dir, dir)
   end
 
   @doc """

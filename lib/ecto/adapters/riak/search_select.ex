@@ -146,10 +146,6 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
         left <> right
       :++ ->
         left ++ right
-      :date_add ->
-        nil
-      :date_sub ->
-        nil
       _ ->
         raise Ecto.QueryError, reason: "unsupported select binary op: #{op}"
     end

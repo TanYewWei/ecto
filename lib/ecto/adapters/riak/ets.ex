@@ -4,8 +4,8 @@ defmodule Ecto.Adapters.Riak.ETS do
   @spec get(term, term) :: tuple
   def get(key, default // nil) do
     case :ets.lookup(table_name, key) do
-      [x] -> x
-      _   -> default
+      [{_,x}] -> x
+      _       -> default
     end
   end
 
@@ -19,9 +19,17 @@ defmodule Ecto.Adapters.Riak.ETS do
 
   @spec delete(term) :: :ok
   def delete(key) do
-    case :ets.delete(table_name. key) do
+    case :ets.delete(table_name, key) do
       true -> :ok
       _    -> {:error, :failed_delete}
+    end
+  end
+
+  @spec delete_table() :: :ok
+  def delete_table() do
+    case :ets.delete(table_name) do
+      true -> :ok
+      rsn  -> {:error, rsn}
     end
   end
 

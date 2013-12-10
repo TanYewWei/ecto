@@ -212,6 +212,14 @@ defmodule Ecto.Adapters.Riak.Searchtest do
     expected = [2, 2]
     assert expected == post_proc.(posts)
     
+    ## multiple clauses
+    {_, post_proc} = group_by(base, [p], p.title)
+    |> having([p], sum(p.count) > avg(p.count))
+    |> having([p], min(p.count) < 3)
+    |> select([p], count(p.id)) |> normalize |> Search.query
+    expected = [2, 2]
+    assert expected == post_proc.(posts)
+
     ## having without group_by
     {_, post_proc} = having(base, [p], count(p.id) > 1)
     |> select([p], p.id) |> normalize |> Search.query

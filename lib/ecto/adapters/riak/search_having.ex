@@ -28,7 +28,6 @@ defmodule Ecto.Adapters.Riak.SearchHaving do
     ## construct predicate function which gets called
     ## with a list of entities, returning true if the group
     ## satisfies the havings conditions
-    
     fn(entities) ->
         cond do
           havings == [] ->
@@ -39,10 +38,10 @@ defmodule Ecto.Adapters.Riak.SearchHaving do
             ## entities :: [ [entity] ]
             ## as a result of a group_by post processing function
             ##Enum.map(entities, fn(x)-> IO.puts length(x) end)
-            rs = Enum.filter(entities,
+            Enum.filter(entities,
                         fn(entity_list)->
-                            res = Enum.map(havings, &having_filter(&1.expr, entity_list))
-                            Enum.all?(res, &(true == &1))
+                            Enum.map(havings, &having_filter(&1.expr, entity_list))
+                            |> Enum.all?(&(true == &1))
                         end)
           true ->
             ## In this case, treat all entities as a single group.
@@ -58,8 +57,7 @@ defmodule Ecto.Adapters.Riak.SearchHaving do
     end
   end
   
-  @spec having_filter(term, [entity]) :: boolean 
-  ## though intermediate results can be any term
+  @spec having_filter(term, [entity]) :: boolean ## Intermediate results can be any term
 
   defp having_filter({{:., _, [{:&, _, [_]}, field]}, _, _}, entities) when is_atom(field) do
     ## attribute accessor
@@ -75,11 +73,12 @@ defmodule Ecto.Adapters.Riak.SearchHaving do
     value_fn = fn(entity)-> SearchUtil.entity_keyword(entity)[field] end
     value_type_fn = fn(entity)-> SearchUtil.entity_field_type(entity, field) end
     
-    ## Dispatch
+    ## Dispatch -- note that we are returning 
+    ## a list of the aggregate value
     [case op do
       :avg ->
         length = length(entities)
-        sum = Enum.reduce(entities, 0, fn(entity, acc)-> acc + value_fn.(entity) end)
+        sum = Enum.reduce(entities, 0, &(value_fn.(&1) + &2))
         sum / length
       :count ->
         length(entities)
