@@ -4,8 +4,8 @@ defmodule Ecto.Adapters.Riak.SearchUtil do
   ## Search Schema
   ## ----------------------------------------------------------------------e
 
-  def search_schema(model) do
-    
+  def search_index(entity_module) do
+    Regex.replace(%r"^Elixir.|.Entity$", to_string(entity_module), "")
   end
 
   ## ----------------------------------------------------------------------

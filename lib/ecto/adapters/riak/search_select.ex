@@ -171,6 +171,10 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
   ## Aggregate Transforms
   ## ----------------------------------------------------------------------
 
+  defp select_aggregate_transform({{:., _, [_, field]}, _, _}, entities) when is_atom(field) do
+    Enum.map(entities, fn(x)-> SearchUtil.entity_keyword(x)[field] end)
+  end
+
   defp select_aggregate_transform({op, _, args}, entities)
   when is_atom(op) and op in @aggregate_ops do
     ## first argument of args must be a field accessor

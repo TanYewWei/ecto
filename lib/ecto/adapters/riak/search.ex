@@ -75,9 +75,8 @@ defmodule Ecto.Adapters.Riak.Search do
   ## ----------------------------------------------------------------------
   ## API
   ## ----------------------------------------------------------------------
+  
   """
-  # Notes on query support
-
   Order of operations:
 
   1. form query from any LIMIT, OFFSET, ORDER_BY, and WHERE clauses
@@ -90,7 +89,7 @@ defmodule Ecto.Adapters.Riak.Search do
      The order of post-processing is:
 
      (a) form GROUP_BY groups
-     (b) apply HAVING aggregate functions  (NOT YET IMPLEMENTED)
+     (b) apply HAVING aggregate functions
      (c) perform SELECT transformations
 
   4. Results processing
@@ -100,32 +99,10 @@ defmodule Ecto.Adapters.Riak.Search do
      - apply the post-processing function from step (3)
   
   ----------------------------------------------------------------------
-  Explanation of the query operation semantics follows ...
+  NOTES
   ----------------------------------------------------------------------
 
-  ## FROM
-
-  Riak will only support a single from clause.
-
-
-  ## LIMIT, OFFSET, ORDER BY
-
-  These are supported by YZ, and can work just fine as a straightforward query.
-
-
-  ## WHERE
-
-  The constraints imposed in a where clause are always applied after 
- 
-  
-  ## GROUP BY and HAVING
-
-  These are going to require post-processing.
-  
-  For now, only the group_by clause is supported
-
-
-  ## JOINS are not supported
+  - JOIN is not supported
 
   """
 
@@ -138,33 +115,34 @@ defmodule Ecto.Adapters.Riak.Search do
   @spec query(query) :: {{search_index, querystring, [search_option]}, post_proc_fun}
   def query(Query[] = query) do    
     sources = create_names(query)  # :: [source]
-    search_index = Util.model(query.from) |> to_string
+    search_index = Util.model(query.from) |> SearchUtil.search_index
     
     ## Check to see if join is specified
     ## and raise error if present
     join(query) 
 
+    ## Build Query Part
     where    = SearchWhere.query(query.wheres, sources)    
     order_by = order_by(query.order_bys)
     limit    = limit(query.limit)
     offset   = offset(query.offset)
-
-    group_by_post_proc = group_by(query.group_bys)
-    having_post_proc   = SearchHaving.post_proc(query.havings)
-    select_post_proc   = SearchSelect.post_proc(query.select)
-    post_proc = fn(entities)->                    
-                    group_by_post_proc.(entities)
-                    ##|> having_post_proc.()
-                    |> select_post_proc.()
-                end
-
-    ## querystring is just the "q" part 
-    ## of the arguments to Yokozuna
+    
     querystring = Enum.join([where])
     options = List.flatten([order_by, limit, offset])
       |> Enum.filter(&(nil != &1))
     query_part = {search_index, querystring, options}
+
+    ## Build Post-processing function
+    group_by = group_by(query.group_bys)
+    having   = SearchHaving.post_proc(query.havings)
+    select   = SearchSelect.post_proc(query.select)
+    post_proc = fn(entities)->                    
+                    group_by.(entities)
+                    |> having.()
+                    |> select.()
+                end
     
+    ## DONE
     {query_part, post_proc}
   end
 
@@ -209,13 +187,9 @@ defmodule Ecto.Adapters.Riak.Search do
     end
   end  
 
-  @spec parse_search_result(search_doc) :: {riak_key :: binary, ListDict :: tuple}
+  @spec parse_search_result(search_doc) :: {riak_key :: binary, json :: tuple}
   defp parse_search_result({_, doc}) do
     riak_key = Dict.get(doc, @yz_riak_key)
-
-    ## ==============
-    ## Construct JSON
-    
     json =
       ## Filter out YZ keys
       Enum.filter(doc, fn(x)-> ! (x in @yz_meta_keys) end)
@@ -279,7 +253,7 @@ defmodule Ecto.Adapters.Riak.Search do
   ## GROUP BY
   ## ----------------------------------------------------------------------
 
-  @spec group_by(term) :: (([entity] | [[entity]]) -> [entity])
+  @spec group_by(term) :: (([entity]) -> [[entity]])
   
   defp group_by([]) do
     ## Empty group_by query should simply return 
