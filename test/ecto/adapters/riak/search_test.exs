@@ -144,7 +144,16 @@ defmodule Ecto.Adapters.Riak.Searchtest do
   end
 
   test "group_by with having with select" do
+    base = from(p in Post)
+    [p0, p1, p2, p3, p4] = posts = mock_posts()
     
+    ## avg
+    {_, post_proc} = group_by(base, [p], p.title)
+    |> having([p], avg(p.count) >= 4)
+    |> select([p], count(p.id)) |> normalize |> Search.query
+    expected = [ 2, 2 ]  ## groups will be [ [p0], [p1,p2], [p3,p4] ]
+    assert expected == post_proc.(posts)
+
   end
   
   defp mock_posts() do
