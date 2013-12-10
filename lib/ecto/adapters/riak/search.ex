@@ -25,9 +25,6 @@ defmodule Ecto.Adapters.Riak.Search do
   @type expr_field    :: atom  ## entity field reference
   @type expr_var      :: {atom, list, list}
   @type expr_order_by :: {:asc | :desc, expr_var, expr_field}
-  @type join_type     :: :inner | :left | :right | :full
-  @type join_query    :: binary
-  @type literal       :: term
   @type query         :: Ecto.Query.t
   @type querystring   :: binary
   @type search_index  :: binary
@@ -65,9 +62,6 @@ defmodule Ecto.Adapters.Riak.Search do
 
   ## post processing
   @type post_proc_fun      :: ((entity) -> term)
-  @type post_proc_group_by :: (([entity]) -> HashDict.t)
-  @type post_proc_having   :: (([entity] | HashDict.t) -> HashDict.t)
-  @type predicate_fun      :: ((term) -> boolean)
 
   ## ----------------------------------------------------------------------
   ## Constants
