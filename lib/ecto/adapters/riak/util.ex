@@ -1,4 +1,4 @@
-defmodule Ecto.Adapters.Riak.SearchUtil do
+defmodule Ecto.Adapters.Riak.Util do
 
   ## ----------------------------------------------------------------------
   ## Search Schema

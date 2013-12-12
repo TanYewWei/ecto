@@ -66,6 +66,8 @@ defmodule Ecto.Adapters.Riak.Migration do
   use Behaviour
 
   alias Ecto.Adapters.Riak.ETS
+  alias Ecto.Adapters.Riak.Util, as: RiakUtil
+  alias Ecto.Adapters.Riak.MigrationModulesException
   
   ## ----------------------------------------------------------------------
   ## Types
@@ -75,6 +77,8 @@ defmodule Ecto.Adapters.Riak.Migration do
   @type entity     :: Ecto.Entity.t
   @type module     :: atom
   @type store      :: term  ## riak storage format
+  @type new_model  :: module
+  @type old_model  :: module
 
   ## ----------------------------------------------------------------------
   ## Constants
@@ -85,8 +89,8 @@ defmodule Ecto.Adapters.Riak.Migration do
 
   ## ----------------------------------------------------------------------
   ## Callbacks
-  ## ----------------------------------------------------------------------
-  
+  ## ----------------------------------------------------------------------   
+
   @doc """
   Perform a dynamic migration to an entity
   from current entity version N to N+1
@@ -100,13 +104,13 @@ defmodule Ecto.Adapters.Riak.Migration do
   now of the new version, which will then be used to construct
   a new entity
   """
-  defcallback migrate_up(attributes) :: attributes
+  defcallback migrate_up(entity, new_model) :: entity
   
   @doc """
   Same as the above, but from a version from N to N-1
   Immediately returns `attributes` if N=0
   """
-  defcallback migrate_down(attributes) :: attributes
+  defcallback migrate_down(entity, old_model) :: entity
 
   @doc "Returns the version number for the model"
   defcallback version() :: binary
@@ -187,29 +191,30 @@ defmodule Ecto.Adapters.Riak.Migration do
 
   @spec migrate(entity) :: entity
   def migrate(entity) do
-    version = entity.version
-    current = current_version(entity)
+    entity_version = entity.version
+    target_version = current_version(entity)
+    IO.puts("attempt migration of #{entity_model(entity)} from version #{entity_version} to #{target_version}")
     
     ## Make upgrades implicit 
     ## and set current version accordingly
-    if version > current do
-      set_current_version(entity, version)
+    if entity_version > target_version do
+      set_current_version(entity, entity_version)
     end
     
     cond do
-      version == current ->
+      entity_version == target_version ->
         entity
-      version < current ->
+      target_version > entity_version ->
         ## migrate up
         if migration_up_allowed? do
-          migrate_up(entity, version)
+          migrate_up(entity, target_version)
         else
           entity
         end
-      version > current ->
+      target_version < entity_version ->
         ## migrate down
         if migration_down_allowed? do
-          migrate_down(entity, version)
+          migrate_down(entity, target_version)
         else
           entity
         end
@@ -221,37 +226,55 @@ defmodule Ecto.Adapters.Riak.Migration do
   @spec migrate_up(entity, integer) :: entity
   def migrate_up(entity, version) do
     ## Get relevant migration modules in ascending order
-    modules = migration_modules(entity)
-            |> Enum.filter(&(&1 <= version && &1 >= entity.version))
-            |> Enum.sort(fn({_,v1}, {_,v2})-> v1 < v2 end)
-            |> Enum.map(fn({mod,_})-> mod end)
-    
-    case length(modules) == (version - entity.version + 1) do
-      true ->
-        List.foldl(modules, 
-                   entity,
-                   fn(module, ent)-> module.migrate_up(ent) end)
-      _ ->
-        raise "missing migration files"
-    end
+    modules = migration_modules(entity, version)
+    List.foldl(modules, 
+               entity,
+               fn(module, ent)-> module.migrate_up(ent, module) end)
   end
 
   @spec migrate_down(entity, integer) :: entity
   def migrate_down(entity, version) do
-    ## Get relevant migration modules in descrending order
-    modules = migration_modules(entity)
-            |> Enum.filter(&(&1 >= version && &1 <= entity.version))
-            |> Enum.sort(fn({_,v1}, {_,v2})-> v1 > v2 end)
-            |> Enum.map(fn({mod,_})-> mod end)
-    
-    case length(modules) == (entity.version - version + 1) do
-      true ->
-        List.foldl(modules,
-                   entity,
-                   fn(module, ent)-> module.migrate_down(ent) end)
-      _ ->
-        raise "missing migration files"
+    ## Get relevant migration modules in descending order
+    modules = migration_modules(entity, version)
+    List.foldl(modules,
+               entity,
+               fn(module, ent)-> module.migrate_down(ent, module) end)
+  end
+
+  @spec migration_modules(entity, integer) :: [module] | no_return
+  defp migration_modules(entity, version) do
+    ## checks that all modules from the current entity version
+    ## to the required new version have been loaded,
+    ## raising an error if any modules are missing
+    range = cond do
+      version > entity.version -> entity.version+1..version
+      version < entity.version -> version..entity.version
+                                  |> Enum.to_list
+                                  |> Enum.reverse
+      true                     -> version..version
     end
+    
+    modules = Enum.map(range, &entity_module(entity, &1))
+    Enum.map(modules, fn(module)->
+                          if Code.ensure_loaded?(module) do
+                            module
+                          else
+                            raise MigrationModulesException, 
+                              model: entity.model,
+                              entity_version: entity.version,
+                              target_version: version,
+                              failed_module: module,
+                              expected_modules: modules
+                          end
+                      end)
+  end
+
+  defp entity_module(entity, version) do
+    version_suffix = ".Version#{version}"
+    version_suffix_regex = %r"\.Version\d+$"
+    str = (to_string(entity.model)
+           |> String.replace(version_suffix_regex, "")) <> version_suffix
+    RiakUtil.to_atom(str)
   end
 
   @doc """
@@ -259,7 +282,7 @@ defmodule Ecto.Adapters.Riak.Migration do
   This gets called 
   """
   def set_current_version(entity, version) do
-    key = "#{entity.model}_ver"
+    key = "#{entity_model(entity)}_ver"
     ETS.put(key, version)
   end
   
@@ -270,42 +293,53 @@ defmodule Ecto.Adapters.Riak.Migration do
   """
   @spec current_version(entity) :: integer
   def current_version(entity) do
-    key = "#{entity.model}_ver"
+    key = "#{entity_model(entity)}_ver"
     ETS.get(key, 0)
   end
 
-  @doc """
-  Returns a list of all migration classes
-  in order of model version
-  for an entity.
+  defp entity_model(entity) do
+    ## returns the entity model with any version suffix removed
+    to_string(entity.model)
+    |> String.replace(%r"\.Version\d+$", "")
+    |> RiakUtil.to_atom
+  end
 
-  We expect the migration classes to be sorted in 
-  lexicographic order.
+  @doc """
+  Returns a list of all migration classes for an entity
+  in order of model version.
+
+  We expect the migration files to have the naming convention:
+  
+    ${fully_qualified_entity_name}.version${integer}.exs?
+
+  So a model: App.Model.Post
+  would have its model declared in a file: app.model.post.version1.ex
+  within the migrations directory
 
   example reply: [ {Post.Version1, 1}, 
                    {Post.Version2, 2},
                    {Post.Version3, 3} ]
   """
-  @spec migration_modules(entity) :: [{module, version :: integer}]
-  def migration_modules(entity) do
-    model = entity.model
-    filename = module_to_filename(model)
-    regex = %r"#{filename}\.version\d+\.ex$"
+  # @spec migration_modules(entity) :: [{module, version :: integer}]
+  # def migration_modules(entity) do
+  #   model = entity.model
+  #   filename = module_to_filename(model)
+  #   regex = %r"#{filename}\.version\d+\.exs?$"
     
-    case File.ls(migration_dir()) do
-      {:ok, files} ->
-        Enum.filter(files, &Regex.match?(regex, &1))
-        |> Enum.sort
-        |> Enum.map(fn(filename)->
-                        [ver_str] = Regex.run(%r"\d+.ex$", filename)
-                        version = binary_to_integer(ver_str)
-                        module = filename_to_module(filename)
-                        {module, version}
-                    end)
-      _ ->
-        []
-    end
-  end
+  #   case File.ls(migration_dir()) do
+  #     {:ok, files} ->
+  #       Enum.filter(files, &Regex.match?(regex, &1))
+  #       |> Enum.map(fn(filename)->
+  #                       [ver_str] = Regex.run(%r"\d+\.exs?$", filename)
+  #                       version = String.replace(%r".exs", "") |> binary_to_integer
+  #                       module = filename_to_module(filename)
+  #                       {module, version}
+  #                   end)
+  #       |> Enum.sort(fn({_,v0}, {_,v1})-> v0 > v1 end)
+  #     _ ->
+  #       []
+  #   end
+  # end
 
   @doc """
   returns a string path to the directory 
