@@ -54,7 +54,7 @@ defmodule Ecto.Adapters.Riak.Datetime do
   @spec now_datetime() :: datetime
   def now_datetime(), do: :calendar.now_to_universal_time(:os.timestamp)
 
-  def now_local_datetime(), do: :calender.now_to_local_time(:os.timestamp)
+  def now_local_datetime(), do: :calendar.now_to_local_time(:os.timestamp)
 
   def now_ecto_datetime(), do: now_datetime |> to_ecto_datetime
 
