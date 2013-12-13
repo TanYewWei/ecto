@@ -51,7 +51,7 @@ migrate_from_newer(entity) :: entity
 
     It will then be the developer's responsibility to implement these functions accordingly
 
-1. It is recommended that the developer validates with `RiakUtil.entity_validate/1` when working with Riak Entities. This is distinct from the `validate/1` macro (see the [Validations documentation](http://elixir-lang.org/docs/ecto/Ecto.Model.Validations.html) for details).
+1. It is recommended that the developer validates entities with an inline `Ecto.Adapters.Riak.Validators.validate/0-1` macros when working with Riak Entities. The examples below show how to use these macros. See the [Validations documentation](http://elixir-lang.org/docs/ecto/Ecto.Model.Validations.html) for more details.
 
 ---
 
@@ -63,15 +63,15 @@ defmodule My.Great.Model.Version1 do
 
   use Ecto.RiakModel
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
+  require Ecto.Adapters.Riak.Validators, as: RiakValidate
 
   queryable "models" do
     field :version, :integer, default: 2
     field :hello,   :string
 
     ## Default validation
-    validate model,
-      version: present(message: "must have version") and greater_than(0),
-      id: present(message: "ID should be a unique string")
+    ## checks for :id and :version fields
+    RiakValidate.validate()
   end
 
   def version(), do: 1
@@ -104,18 +104,19 @@ defmodule My.Great.Model.Version2 do
 
   use Ecto.RiakModel
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
+  require Ecto.Adapters.Riak.Validators, as: RiakValidate
 
   queryable "models" do
     field :version,   :integer, default: 2
     field :world,     :string
     field :some_list, { :list, :string }
 
-    ## Validations
-    validate model,
-      version: present(message: "must have version") and greater_than(1),
-      id: present(message: "must have globally unique string as ID"),
+    ## Checks for :version and :id fields
+    ## along with whatever other fields are provided through
+    ## a keyword list. Note that 
+    RiakValidate.validate(
       world: has_format(%r/Happy/, message: "why aren't you happy!!"),
-      also:  validate_some_list
+      also:  validate_some_list)
 
     validatep validate_some_list(x),
       some_list: present(message: "give me a list!")

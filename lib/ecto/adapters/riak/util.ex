@@ -97,7 +97,7 @@ defmodule Ecto.Adapters.Riak.Util do
       to_string(x) |> binary_to_existing_atom
     catch
       ## case where there isn't an existing atom
-      _,_ -> to_string(x) |> binary_to_atom(x)
+      _,_ -> to_string(x) |> binary_to_atom
     end
   end
 

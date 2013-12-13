@@ -1,5 +1,6 @@
 alias Ecto.Adapters.Riak.Datetime
-require Ecto.Adapters.Riak.Util, as: RiakUtil
+alias Ecto.Adapters.Riak.Util, as: RiakUtil
+require Ecto.Adapters.Riak.Validators, as: RiakValidate
 
 ## ----------------------------------------------------------------------
 ## Model Definitions
@@ -16,7 +17,14 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.V1 do
     field :datetime, :datetime
     field :interval, :interval
     field :virtual,  :virtual
+    field :hello,    :virtual
     field :version,  :integer, default: 1
+
+    RiakValidate.validate(float: present,
+                          also: validate_some_thing)
+
+    validatep validate_some_thing(x),
+      datetime: present(message: "failed validate!")
   end
 
   def version(), do: 1
@@ -190,7 +198,8 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
   test "migrate up" do
     Migration.migration_up_enable()
     e0 = mock_entity_ver1()
-    Migration.set_current_version(e0, 1)
+    IO.puts(e0.validate)
+    Migration.set_current_version(e0, 1)    
 
     ## migration to same version returns same entity
     e1 = Migration.migrate(e0)
@@ -288,7 +297,8 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
   ## ------------------------------------------------------------
 
   defp mock_entity_ver1() do
-    Model1.new(integer: 1,
+    Model1.new(id: "some_unique_id",
+               integer: 1,
                float: 2.0,               
                string: "a string",
                binary: <<0, 1, 2>>,

@@ -11,17 +11,28 @@ defmodule Ecto.Adapters.Riak.Validators do
     end
   end
 
+  defmacro validate(fields) do
+    quote do
+      validate x,
+        [ { :id, unquote(__MODULE__).is_binary },
+          { :version, unquote(__MODULE__).is_integer },
+          unquote_splicing(fields) ]
+    end
+  end
+
   def is_binary(attr, value, opts // []) do
-    case is_binary(value) do
-      true -> []
-      _    -> [{ attr, opts[:message] || "is not a string" }]
+    if is_binary(value) do
+      []
+    else
+      [{ attr, opts[:message] || "is not a string" }]
     end
   end
 
   def is_integer(attr, value, opts // []) do
-    case is_binary(value) do
-      true -> []
-      _    -> [{ attr, opts[:message] || "is not an integer" }]
+    if is_integer(value) do
+      []
+    else
+      [{ attr, opts[:message] || "is not an integer" }]
     end
   end
 

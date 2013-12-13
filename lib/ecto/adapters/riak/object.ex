@@ -19,11 +19,11 @@ defmodule Ecto.Adapter.Riak.Object do
     module = elem(entity, 0)
     model_name = entity.model |> to_string
     fields = module.__entity__(:entity_kw, entity, primary_key: true)
-    fields = Enum.map(fields, fn({k,v})->
+    fields = Enum.map(fields, fn({ k, v })->
                                   {to_string(k) |> Search.yz_key, v}
                               end)
-    fields = [ {@key_model_name, model_name}, 
-               {@key_statebox_ts, timestamp()}
+    fields = [ { @key_model_name, model_name }, 
+               { @key_statebox_ts, timestamp() }
                | fields ]
 
     ## Form riak object
@@ -36,7 +36,7 @@ defmodule Ecto.Adapter.Riak.Object do
   @spec object_to_entity(object) :: entity
   def object_to_entity(object) do
     case RiakObject.get_values(object) do
-      [value] ->
+      [ value ] ->
         resolve_json(value)
       values ->
         resolve_siblings(values)
@@ -59,14 +59,14 @@ defmodule Ecto.Adapter.Riak.Object do
 
   @spec resolve_json(json) :: statebox
   def resolve_json(json) do
-    {inner} = json
+    { inner } = json
     resolve_listdict(inner)
   end
 
   @spec resolve_listdict(ListDict) :: statebox
   def resolve_listdict(dict) do
     meta_keys = [ @json_key_model_name, @json_key_statebox_ts ]
-    {meta, attr} = Dict.split(dict, meta_keys)
+    { meta, attr } = Dict.split(dict, meta_keys)
 
     ## Get entity info.
     ## This is needed to remove YZ suffixes used for search indexing
@@ -82,7 +82,7 @@ defmodule Ecto.Adapter.Riak.Object do
     ## Note that we never create nested JSON objects from Ecto entities.
     ops = Enum.reduce(dict,
                       [],
-                      fn({k,v}, acc)->
+                      fn({ k, v }, acc)->
                           k = Search.key_from_yz(k) |> to_atom
                           if is_list(v) do
                             ## add-wins behaviour
@@ -104,8 +104,8 @@ defmodule Ecto.Adapter.Riak.Object do
     entity_fields = module.__entity__(:field_names)
     Enum.map(entity_fields, fn(x)->
                                 case :orddict.find(x, values) do
-                                  {:ok, value} ->
-                                    {x, value} ## {atom, term}
+                                  { :ok, value } ->
+                                    { x, value } ## {atom, term}
                                   _ ->
                                     nil
                                 end
