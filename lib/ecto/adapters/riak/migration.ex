@@ -1,68 +1,7 @@
 defmodule Ecto.Adapters.Riak.Migration do
-  @moduledoc %S"""
-  Riak 1.4 has no notion of stop-the-world strong consistency.
-  Riak 2.0 will ship with strong consistency, but we will not rely
-  on that because it requires bucket_type configuration that will
-  not be compatible with CRDT support
-  (we want to use CRDTs in the future)
-
-  ## Migration Process
-
-  Migrations are dynamic and require 3 steps:
+  ## Documentation available in the "migrations.md" file
+  ## located in the same directory as this module
   
-  1. On each read of an entity, we check that:
- 
-     - the entity is NOT up to date with the latest version
-       that the server knows how to handle
-  
-     - migrations are enabled
-
-     If both those are true, then migration continues.       
-  
-     If the version is higher than anything that the server
-     knows how to handle, then the read should fail with
-     {:error, :version_too_high}  
-  
-     In other words, the appropriate migration modules MUST
-     be present on the server instance for it to be able to 
-     serve queries as needed. For this reason, you SHOULD update
-     all your servers with the appropriate migration modules
-     as close to the same time as possible.
-
-     The model should be updated before any processing should
-     take place, and the next put to Riak should write the entity
-     in this new format.
-  
-  2. 
-  
-  3. The next update to Riak will commit the new object to disk.
-
-     This means that just reading an entity from a different version
-     DOES NOT persist the new version of the entity to Riak.
-
-  ## Intended Migration Procedure
-
-  1. Disable migrations on all servers
-  2. Copy migration specs to all servers
-  3. Enable migrations across all servers
-
-  ## Migration Specs
-  
-  Each migration version spec is specified in an elixir file.
-  The filename should follow the format:
-  
-    `#{module_with_underscores}_#{version_number}.ex`
-  
-  eg: the first version of `Some.Funny.ModuleToTest`
-      becomes `some.funny.module_to_test_1.ex`
-  
-  Each migration version spec has to implement the callbacks
-  specified by this module, and have to be stored in a directory
-  as specified by the :riak_migrations key in the mix.exs project dict
-  or by dynamic reconfiguration via a call to the
-  set_migrations_root_dir/1 function below
-  """
-
   use Behaviour
 
   alias Ecto.Adapters.Riak.ETS
@@ -107,6 +46,15 @@ defmodule Ecto.Adapters.Riak.Migration do
 
   @doc "Returns the version number for the model"
   defcallback version() :: binary
+
+  @doc """
+  Checks if a module implements the Ecto.Adapters.Riak.Migration behaviour
+  """
+  def is_migration_module?(module) do
+    function_exported?(module, :version, 1)
+    function_exported?(module, :migrate_from_previous, 1)
+    function_exported?(module, :migrate_from_newer, 1)
+  end
 
   ## ----------------------------------------------------------------------
   ## Admin Switches
@@ -186,7 +134,6 @@ defmodule Ecto.Adapters.Riak.Migration do
   def migrate(entity) do
     entity_version = entity.version
     target_version = current_version(entity)
-    IO.puts("attempt migration of #{entity_model(entity)} from version #{entity_version} to #{target_version}")
     
     ## Make upgrades implicit 
     ## and set current version accordingly
@@ -217,7 +164,7 @@ defmodule Ecto.Adapters.Riak.Migration do
   end
 
   @spec migrate_up(entity, integer) :: entity
-  def migrate_up(entity, version) do
+  defp migrate_up(entity, version) do
     ## Get relevant migration modules in ascending order
     modules = migration_modules(entity, version)
     List.foldl(modules,
@@ -226,7 +173,7 @@ defmodule Ecto.Adapters.Riak.Migration do
   end
 
   @spec migrate_down(entity, integer) :: entity
-  def migrate_down(entity, version) do
+  defp migrate_down(entity, version) do
     ## Get relevant migration modules in descending order
     modules = migration_modules(entity, version)
     List.foldl(modules,
@@ -235,32 +182,121 @@ defmodule Ecto.Adapters.Riak.Migration do
   end
 
   @spec migration_modules(entity, integer) :: [module] | no_return
+
   defp migration_modules(entity, version) do
-    ## checks that all modules from the current entity version
-    ## to the required new version have been loaded,
-    ## raising an error if any modules are missing
-    range = cond do
-      version > entity.version -> entity.version+1..version
-      version < entity.version -> version..entity.version
-                                  |> Enum.to_list
-                                  |> Enum.reverse
-      true                     -> version..version
-    end
-    
-    modules = Enum.map(range, &entity_module(entity, &1))
-    Enum.map(modules, fn(module)->
-                          if Code.ensure_loaded?(module) do
-                            module
-                          else
-                            raise MigrationModulesException, 
-                              model: entity.model,
-                              entity_version: entity.version,
-                              target_version: version,
-                              failed_module: module,
-                              expected_modules: modules
-                          end
-                      end)
+    migration_modules_worker(entity, entity.version, version)
   end
+
+  @spec migration_modules_worker(entity, integer, integer) :: [module]
+
+  defp migration_modules_worker(entity, current, target) when current == target do
+    [entity.model]
+  end
+
+  defp migration_modules_worker(entity, current, target) when current < target do
+    ## Upgrade
+    prefix = entity_prefix(entity.model)
+    modules = :code.all_loaded
+      |> Enum.filter(fn({mod, _})->
+                         is_migration_module?(mod)
+                         && prefix == entity_prefix(mod)
+                         && mod.version <= target
+                         && mod.version > current
+                     end)
+      |> Enum.map(fn({mod, _})-> mod end)
+
+    ## Check for duplicates, raising error if any exist
+    migration_modules_deduplicate!(modules, entity, target)
+    
+    ## Sort in ascending order
+    Enum.sort(modules, fn(m0, m1)-> m0.version < m1.version end)
+  end
+
+  defp migration_modules_worker(entity, current, target) when current > target do
+    ## Downgrade
+    prefix = entity_prefix(entity.model)
+    modules = :code.all_loaded
+      |> Enum.filter(fn({mod, _})->
+                         is_migration_module?(mod)
+                         && prefix == entity_prefix(mod)
+                         && mod.version >= target
+                         && mod.version < current
+                     end)
+      |> Enum.map(fn({mod, _})-> mod end)
+
+    ## Check for duplicates, raising error if any exist
+    migration_modules_deduplicate!(modules, entity, target)
+    
+    ## Sort in descending order
+    Enum.sort(modules, fn(m0, m1)-> m0.version > m1.version end)
+  end
+
+  defp migration_modules_deduplicate!(modules, entity, target_version) do
+    ## checks for any duplicates in the modules list
+    ## and raises an error if so
+    version_set = Enum.reduce(modules, HashSet.new, fn(mod, acc)->
+      try do
+        HashSet.put(acc, mod.version)
+      rescue
+        UndefinedFunctionError ->
+          raise MigrationModulesException,
+            model: entity.model,
+            entity_version: entity.version,
+            target_version: target_version,
+            failed_module: mod,
+            modules: modules
+        end
+      end)   
+    
+    if HashSet.size(version_set) != length(modules) do
+      raise MigrationModulesException,
+        model: entity.model,
+        entity_version: entity.version,
+        target_version: target_version,
+        modules: modules
+    else
+      false
+    end
+  end
+
+  defp entity_prefix(module) do
+    components = module |> to_string |> String.split(".")
+    case components do
+      [first | rest] when first == "Elixir" ->
+        List.delete_at(rest, -1)
+      _ ->
+        nil
+    end
+  end
+
+  # defp migration_modules(entity, version) do
+  #   ## checks that all modules from the current entity version
+  #   ## to the required new version have been loaded,
+  #   ## raising an error if any modules are missing,
+  #   ## or if any modules have duplicate definitions
+    
+  #   range = cond do
+  #     version > entity.version -> entity.version+1..version
+  #     version < entity.version -> version..entity.version
+  #                                 |> Enum.to_list
+  #                                 |> Enum.reverse
+  #     true                     -> version..version
+  #   end
+    
+  #   modules = Enum.map(range, &entity_module(entity, &1))
+  #   Enum.map(modules, fn(module)->
+  #                         if Code.ensure_loaded?(module) do
+  #                           module
+  #                         else
+  #                           raise MigrationModulesException, 
+  #                             model: entity.model,
+  #                             entity_version: entity.version,
+  #                             target_version: version,
+  #                             failed_module: module,
+  #                             expected_modules: modules
+  #                         end
+  #                     end)
+  # end
 
   defp entity_module(entity, version) do
     version_suffix = ".Version#{version}"
@@ -280,9 +316,8 @@ defmodule Ecto.Adapters.Riak.Migration do
   end
   
   @doc """
-  Returns the latest version for the entity that the 
-  server knows about. This must have been set by set_latest_version/2
-  and does not reflect the global state of the backend Riak cluster
+  Returns the current traget version for the entity to which migration
+  should be performed. This must have been set by set_current_version/2.
   """
   @spec current_version(entity) :: integer
   def current_version(entity) do

@@ -14,7 +14,14 @@ Hence, migrations have to be dynamic, and performed as entites are read from the
     My.Great.Model.V0
     My.Great.Model.Ver1
     My.Great.Model.Version2
-    My.Great.Model.Zap3
+    My.Great.Model.Zap
+    ```
+
+    but the following does not (because `My.Great.Model` does not give us indication of a shared mode)
+
+    ```
+    My.Great.Model
+    My.Great.Model.Ver1
     ```
 
     The `Ecto.Adapters.Riak.Migration` will look for a module, and any other module that shares a common prefix ("My.Great.Model"), and call the `version/0` function (see step 4) and use the return value to order the modules.

@@ -30,11 +30,12 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version1 do
     
     ## Restore :integer and :float fields
     attr = Keyword.put(attr, :integer, entity.number)
-    attr = Keyword.put(attr, :float, if is_integer(entity.int) do
-                                       entity.int * 1.0
-                                     else
-                                       nil
-                                     end)
+    attr = Keyword.put(attr, :float,
+      if is_integer(entity.int) do
+        entity.int * 1.0
+      else
+        nil
+      end)
 
     ## DONE
     __MODULE__.new(attr)
@@ -70,10 +71,10 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version2 do
                                    else
                                      nil
                                    end)
-
+  
     ## Add new :virtual field
     attr = Keyword.put(attr, :virtual, if nil?(entity.virtual) do
-                                         {:some, "random", 'tuple'}
+                                         { :some, "random", 'tuple' }
                                        else
                                          entity.virtual
                                        end)
@@ -104,7 +105,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version2 do
     attr = Keyword.put(attr, :datetime, Datetime.now_local_ecto_datetime)
 
     ## Add new :virtual field
-    attr = Keyword.put(attr, :virtual, {:some, "random", 'tuple'})
+    attr = Keyword.put(attr, :virtual, { :some, "random", 'tuple' })
 
     ## DONE
     __MODULE__.new(attr)
@@ -117,7 +118,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version3 do
   queryable "model" do
     field :number,   :integer
     field :int,      :integer
-    field :string,   {:list, :string} ## type change
+    field :string,   { :list, :string } ## type change
     field :binary,   :string          ## type change
     ## dropped :datetime, :interval, and :virtual
     field :version,  :integer, default: 3
@@ -266,7 +267,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
     assert e2.binary == e0.binary
     assert is_record(e2.datetime, Ecto.DateTime)
     assert nil == e2.interval
-    assert {:some, "random", 'tuple'} == e2.virtual
+    assert { :some, "random", 'tuple' } == e2.virtual
     
     ## Multiple Version Downgrade
     e3 = mock_entity_ver3()
@@ -288,7 +289,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
 
   defp mock_entity_ver1() do
     Model1.new(integer: 1,
-               float: 2.0,
+               float: 2.0,               
                string: "a string",
                binary: <<0, 1, 2>>,
                datetime: Ecto.DateTime[year: 2000],
@@ -302,7 +303,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
                string: ["hello"],
                binary: "AAEC",
                datetime: Ecto.DateTime[year: 2000],
-               interval: Ecto.Interval[day: 1],
+               interval: Ecto.Interval[day: 1],               
                version: 3)
   end
 
