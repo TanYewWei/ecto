@@ -260,6 +260,11 @@ defmodule Ecto.Adapters.Riak.Migration do
   end
 
   defp entity_prefix(module) do
+    ## Used to check for common module prefixes,
+    ## which indicate different versions of the same model
+    ##
+    ## eg: Given module My.Great.Model.Ver
+    ##     this function returns the list ["My", "Great", "Model"]
     components = module |> to_string |> String.split(".")
     case components do
       [first | rest] when first == "Elixir" ->
@@ -267,44 +272,7 @@ defmodule Ecto.Adapters.Riak.Migration do
       _ ->
         nil
     end
-  end
-
-  # defp migration_modules(entity, version) do
-  #   ## checks that all modules from the current entity version
-  #   ## to the required new version have been loaded,
-  #   ## raising an error if any modules are missing,
-  #   ## or if any modules have duplicate definitions
-    
-  #   range = cond do
-  #     version > entity.version -> entity.version+1..version
-  #     version < entity.version -> version..entity.version
-  #                                 |> Enum.to_list
-  #                                 |> Enum.reverse
-  #     true                     -> version..version
-  #   end
-    
-  #   modules = Enum.map(range, &entity_module(entity, &1))
-  #   Enum.map(modules, fn(module)->
-  #                         if Code.ensure_loaded?(module) do
-  #                           module
-  #                         else
-  #                           raise MigrationModulesException, 
-  #                             model: entity.model,
-  #                             entity_version: entity.version,
-  #                             target_version: version,
-  #                             failed_module: module,
-  #                             expected_modules: modules
-  #                         end
-  #                     end)
-  # end
-
-  defp entity_module(entity, version) do
-    version_suffix = ".Version#{version}"
-    version_suffix_regex = %r"\.Version\d+$"
-    str = (to_string(entity.model)
-           |> String.replace(version_suffix_regex, "")) <> version_suffix
-    RiakUtil.to_atom(str)
-  end
+  end 
 
   @doc """
   Sets the latest version of an entity to server state.
@@ -327,8 +295,8 @@ defmodule Ecto.Adapters.Riak.Migration do
 
   defp entity_model(entity) do
     ## returns the entity model with any version suffix removed
-    to_string(entity.model)
-    |> String.replace(%r"\.Version\d+$", "")
+    ["Elixir" | entity_prefix(entity.model)]
+    |> Enum.join(".")
     |> RiakUtil.to_atom
   end 
                                        

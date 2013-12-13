@@ -1,4 +1,5 @@
 defmodule Ecto.Adapters.Riak.Util do
+  @type entity :: Ecto.Entity.t
 
   ## ----------------------------------------------------------------------
   ## Search Schema
@@ -85,13 +86,18 @@ defmodule Ecto.Adapters.Riak.Util do
     Regex.match?(regex, key)
   end
 
+  ## Turns anything that implements 
+  ## the String.Chars protocol into an atom
+  @spec to_atom(term) :: atom
+  
   def to_atom(x) when is_atom(x), do: x
 
-  def to_atom(x) when is_binary(x) do
+  def to_atom(x) do
     try do
-      binary_to_existing_atom(x)
+      to_string(x) |> binary_to_existing_atom
     catch
-      _,_ -> binary_to_atom(x)
+      ## case where there isn't an existing atom
+      _,_ -> to_string(x) |> binary_to_atom(x)
     end
   end
 
@@ -99,12 +105,48 @@ defmodule Ecto.Adapters.Riak.Util do
   ## Entity Helpers
   ## ----------------------------------------------------------------------
 
+  @doc """
+  Returns a keyword list of all fields of an entity
+  """
+  @spec entity_keyword(entity) :: Keyword.t
   def entity_keyword(entity) do
     elem(entity, 0).__entity__(:entity_kw, entity, primary_key: true)
   end
-
+  
+  @doc """
+  Returns the type of a specified entity field.  
+  """
+  @spec entity_field_type(entity, atom) :: atom
   def entity_field_type(entity, field) do
     elem(entity, 0).__entity__(:field_type, field)
+  end
+  
+  @doc """
+  Checks if an entity passes a basic Riak Entity validation.
+  (has the minimum of information to be persisted/migrated on Riak)
+  Returns an empty list if there are no validation errors.
+  """
+  @spec entity_validate(entity) :: [] | [term]
+  def entity_validate(entity) do
+    version = 
+      try do
+        if is_integer(entity.version) && entity.version >= 0 do
+          []
+        else
+          [version: "version must be a non-negative integer"]
+        end
+      rescue x -> [version: x.message] end
+    
+    id =
+      try do
+        if is_binary(entity.id) do
+          []
+        else
+          [id: "ID must be a globally unique string"]
+        end
+      rescue x -> [id: x.message] end
+      
+    version ++ id
   end
 
 end

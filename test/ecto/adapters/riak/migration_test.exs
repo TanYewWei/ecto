@@ -1,11 +1,11 @@
 alias Ecto.Adapters.Riak.Datetime
-alias Ecto.Adapters.Riak.Util, as: RiakUtil
+require Ecto.Adapters.Riak.Util, as: RiakUtil
 
 ## ----------------------------------------------------------------------
 ## Model Definitions
 ## ----------------------------------------------------------------------
 
-defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version1 do
+defmodule Ecto.Adapters.Riak.MigrationTest.Model.V1 do
   use Ecto.RiakModel  
 
   queryable "model" do
@@ -42,7 +42,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version1 do
   end
 end
 
-defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version2 do
+defmodule Ecto.Adapters.Riak.MigrationTest.Model.Ver2 do
   use Ecto.RiakModel
 
   queryable "model" do
@@ -121,7 +121,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version3 do
     field :string,   { :list, :string } ## type change
     field :binary,   :string          ## type change
     ## dropped :datetime, :interval, and :virtual
-    field :version,  :integer, default: 3
+    field :version,  :integer, default: 3   
   end
 
   def version(), do: 3
@@ -161,8 +161,8 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
   alias Ecto.Adapters.Riak.ETS
   alias Ecto.Adapters.Riak.Migration
   alias Ecto.Adapters.Riak.Search
-  alias Ecto.Adapters.Riak.MigrationTest.Model.Version1, as: Model1
-  alias Ecto.Adapters.Riak.MigrationTest.Model.Version2, as: Model2
+  alias Ecto.Adapters.Riak.MigrationTest.Model.V1, as: Model1
+  alias Ecto.Adapters.Riak.MigrationTest.Model.Ver2, as: Model2
   alias Ecto.Adapters.Riak.MigrationTest.Model.Version3, as: Model3
 
   ## ------------------------------------------------------------

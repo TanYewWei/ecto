@@ -17,22 +17,22 @@ Hence, migrations have to be dynamic, and performed as entites are read from the
     My.Great.Model.Zap
     ```
 
-    but the following does not (because `My.Great.Model` does not give us indication of a shared mode)
+    But the following is not a valid set of Riak Modules (because `My.Great.Model` does not give us indication of a shared module prefix)
 
     ```
     My.Great.Model
     My.Great.Model.Ver1
     ```
 
-    The `Ecto.Adapters.Riak.Migration` will look for a module, and any other module that shares a common prefix ("My.Great.Model"), and call the `version/0` function (see step 4) and use the return value to order the modules.
+    The `Ecto.Adapters.Riak.Migration` will look for a module, and any other module that shares a common prefix ("My.Great.Model" in the example above), and use the return value of the `version/0` function (see step 4) to order the modules.
 
     If any required module is not available during runtime, a `Ecto.Adapters.Riak.MigrationModulesException` is raised. For example, a migration from entity version 1 to version 4 of a module must have modules declared for versions 2, 3, and 4.
 
-    Likewise, if any modules share the same version number, the same `Ecto.Adapters.Riak.MigrationModulesException` exception is raised.
+    Likewise, if any modules share the same version number (and is thus a duplicate), the same `Ecto.Adapters.Riak.MigrationModulesException` exception is raised.
 
     Dynamic reconfiguration of modules can be done using [the `Code.load_file/2` function](http://elixir-lang.org/docs/master/Code.html#load_file/2)
 
-1. Each entity that is to be persisted with Riak should use `Ecto.RiakModel` instead of `Ecto.RiakModel`. This simply makes a change to the `@queryable_defaults` attribute to allow for primary keys to be a random string instead of being an integer.
+1. Each entity that is to be persisted with Riak should `use Ecto.RiakModel` instead of `use Ecto.Model`. This simply makes a change to the `@queryable_defaults` attribute to allow for primary keys to be a random string instead of being an integer.
 
 1. Each entity must also implement the `Ecto.Adapters.Riak.Migration` behaviour, which has 3 required callbacks:
 
@@ -50,7 +50,9 @@ migrate_from_newer(entity) :: entity
     ```
 
     It will then be the developer's responsibility to implement these functions accordingly
-    
+
+1. It is recommended that the developer validates with `RiakUtil.entity_validate/1` when working with Riak Entities. This is distinct from the `validate/1` macro (see the [Validations documentation](http://elixir-lang.org/docs/ecto/Ecto.Model.Validations.html) for details).
+
 ---
 
 Here is an example of two versions of the same model
@@ -65,7 +67,11 @@ defmodule My.Great.Model.Version1 do
   queryable "models" do
     field :version, :integer, default: 2
     field :hello,   :string
-    ## etc ...
+
+    ## Default validation
+    validate model,
+      version: present(message: "must have version") and greater_than(0),
+      id: present(message: "ID should be a unique string")
   end
 
   def version(), do: 1
@@ -100,9 +106,19 @@ defmodule My.Great.Model.Version2 do
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
 
   queryable "models" do
-    field :version, :integer, default: 2
-    field :world,   :string
-    ## etc ...
+    field :version,   :integer, default: 2
+    field :world,     :string
+    field :some_list, { :list, :string }
+
+    ## Validations
+    validate model,
+      version: present(message: "must have version") and greater_than(1),
+      id: present(message: "must have globally unique string as ID"),
+      world: has_format(%r/Happy/, message: "why aren't you happy!!"),
+      also:  validate_some_list
+
+    validatep validate_some_list(x),
+      some_list: present(message: "give me a list!")
   end
 
   def version(), do: 2
