@@ -37,13 +37,21 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
     e0 = mock_post()
     e1 = e0.title("test title 1")
     e1 = e1.count(7)
+    e2 = e0.rating(6)
     
     j0 = Object.entity_to_object(e0) |> object_updatedvalue
     j1 = Object.entity_to_object(e1) |> object_updatedvalue
+    j2 = Object.entity_to_object(e2) |> object_updatedvalue
 
     ## e1 attributes should take precedence
-    entity = Object.resolve_siblings([ j0, j1 ]).temp(e1.temp)
-    assert entity == e1
+    entity = Object.resolve_siblings([ j0, j1, j2 ])
+    assert entity.id == e0.id
+    assert entity.title == e1.title
+    assert entity.text == e0.text
+    assert entity.count == e1.count
+    assert entity.rating == e2.rating
+    assert entity.posted == e0.posted
+    assert entity.temp == "temp"  ## not carried over
   end
 
   defp object_updatedvalue(riak_obj) do
