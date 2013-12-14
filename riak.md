@@ -113,3 +113,5 @@ Querying will be achieved via standard gets when possible and delegate the heavy
 ## TODO
 
 * We depend on a single ETS table to track migration information. Ideally, this should have one ETS table per repo
+
+* Optimize a query which is definitely only going to return a single object to a simple Riak.get request

@@ -1,4 +1,4 @@
-defmodule Ecto.Adapters.Riak.Searchtest do
+defmodule Ecto.Adapters.Riak.SearchTest do
   use ExUnit.Case, async: true
   
   ##require Ecto.Adapters.Riak.Search, as: Search
@@ -9,7 +9,7 @@ defmodule Ecto.Adapters.Riak.Searchtest do
   alias Ecto.UnitTest.Post
 
   defp test_query(query, expected) do
-    {{_, querystring, _}, _} = Search.query(query |> normalize)
+    { { _, querystring, _ }, _ } = Search.query(query |> normalize)
     assert expected == querystring
   end
 
@@ -70,38 +70,38 @@ defmodule Ecto.Adapters.Riak.Searchtest do
     post = mock_post
 
     query = select(base, [p], p) |> normalize
-    {_, post_proc} = Search.query(query)
+    { _, post_proc } = Search.query(query)
     assert [mock_post] == post_proc.([post])
 
     ## tuples
     query = select(base, [p], {p.title, p.text}) |> normalize
-    {_, post_proc} = Search.query(query)
-    assert [{"test title", "test text"}] == post_proc.([post])
+    { _, post_proc } = Search.query(query)
+    assert [{ "test title", "test text" }] == post_proc.([post])
 
     ## unary operators
     query = select(base, [p], round(-4.4)) |> normalize
-    {_, post_proc} = Search.query(query)
+    { _, post_proc } = Search.query(query)
     assert [-4] == post_proc.([post])
 
     query = select(base, [p], upcase("hello ") <> downcase("PEOPLE")) |> normalize
-    {_, post_proc} = Search.query(query)
+    { _, post_proc } = Search.query(query)
     assert ["HELLO people"] == post_proc.([post])
     
     ## binary operators
     query = select(base, [p], [pow(p.count, 2), rem(p.count, 5)]) |> normalize
-    {_, post_proc} = Search.query(query)
-    assert [[16.0, 4]] == post_proc.([post])
+    { _, post_proc } = Search.query(query)
+    assert [ [16.0, 4] ] == post_proc.([post])
     
     query = select(base, [p], p.count*4 + p.count/2 + 2) |> normalize
-    {_, post_proc} = Search.query(query)
+    { _, post_proc } = Search.query(query)
     assert [20] == post_proc.([post])
 
     query = select(base, [p], [p.count*4] ++ [p.rating]) |> normalize
-    {_, post_proc} = Search.query(query)
+    { _, post_proc } = Search.query(query)
     assert [[post.count*4, post.rating]] == post_proc.([post])
 
     query = select(base, [p], p.title <> p.text) |> normalize
-    {_, post_proc} = Search.query(query)
+    { _, post_proc } = Search.query(query)
     assert [post.title <> post.text] == post_proc.([post])
     
   end
@@ -111,42 +111,42 @@ defmodule Ecto.Adapters.Riak.Searchtest do
     [p0, p1, p2, p3, p4] = posts = mock_posts()
     
     ## avg
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> select([p], avg(p.count)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> select([p], avg(p.count)) |> normalize |> Search.query
     expected = [ (p0.count),
                  (p1.count + p2.count) / 2,
                  (p3.count + p4.count) / 2 ]
     assert expected == post_proc.(posts)
 
     ## count
-    {_, post_proc} = group_by(base, [p], p.id)
-    |> select([p], count(p.id)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.id)
+      |> select([p], count(p.id)) |> normalize |> Search.query
     assert [1,1,1,1,1] === post_proc.(posts)
 
     ## max
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> select([p], max(p.count)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> select([p], max(p.count)) |> normalize |> Search.query
     expected = [ p0.count,
                  Enum.max([p1.count, p2.count]),
                  Enum.max([p3.count, p4.count]) ]
     assert expected === post_proc.(posts)
 
     ## min
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> select([p], min(p.count)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> select([p], min(p.count)) |> normalize |> Search.query
     expected = [ p0.count,
                  Enum.min([p1.count, p2.count]),
                  Enum.min([p3.count, p4.count]) ]
     assert expected === post_proc.(posts)
 
     ## sum
-    {_, post_proc} = group_by(base, [p], p.text)
-    |> select([p], sum(p.count)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.text)
+      |> select([p], sum(p.count)) |> normalize |> Search.query
     expected = [ p0.count, p1.count+p2.count, p3.count, p4.count ]
     assert expected === post_proc.(posts)
 
-    {_, post_proc} = group_by(base, [p], p.text)
-    |> select([p], sum(p.rating)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.text)
+      |> select([p], sum(p.rating)) |> normalize |> Search.query
     expected = [ p0.rating, p1.rating+p2.rating, p3.rating, p4.rating ]
     assert expected === post_proc.(posts)
 
@@ -160,69 +160,69 @@ defmodule Ecto.Adapters.Riak.Searchtest do
     ## - having binary operators:
     ##   [ pow, rem, +, -, /, *, <>, ++, date_add, date_sub ]
 
-    {_, post_proc} = group_by(base, [p], p.title) ## groups will be [ [p0], [p1,p2], [p3,p4] ]
-    |> having([p], avg(p.count) - 1 >= 3)
-    |> select([p], count(p.id)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title) ## groups will be [ [p0], [p1,p2], [p3,p4] ]
+      |> having([p], avg(p.count) - 1 >= 3)
+      |> select([p], count(p.id)) |> normalize |> Search.query
     expected = [1, 2]
     assert expected == post_proc.(posts)
 
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> having([p], avg(p.count) + 1 <= 5 * 2)
-    |> select([p], count(p.id)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> having([p], avg(p.count) + 1 <= 5 * 2)
+      |> select([p], count(p.id)) |> normalize |> Search.query
     expected = [1, 2, 2]
     assert expected == post_proc.(posts)
 
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> having([p], avg(p.count) == 8/2)
-    |> select([p], count(p.id)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> having([p], avg(p.count) == 8/2)
+      |> select([p], count(p.id)) |> normalize |> Search.query
     expected = [1, 2]
     assert expected == post_proc.(posts)
 
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> having([p], avg(p.count) != 4)
-    |> select([p], count(p.id)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> having([p], avg(p.count) != 4)
+      |> select([p], count(p.id)) |> normalize |> Search.query
     expected = [2]
     assert expected == post_proc.(posts)    
 
     ## count aggregate function
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> having([p], count(p.id) > 1)
-    |> select([p], p.id) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> having([p], count(p.id) > 1)
+      |> select([p], p.id) |> normalize |> Search.query
     expected = [[p1.id, p2.id], [p3.id, p4.id]]
     [r0, r1] = post_proc.(posts)
     assert p1.id in r0 && p2.id in r0
     assert p3.id in r1 && p4.id in r1
 
     ## max, min, and sum
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> having([p], max(p.count) > 3)
-    |> select([p], count(p.id)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> having([p], max(p.count) > 3)
+      |> select([p], count(p.id)) |> normalize |> Search.query
     expected = [1, 2]
     assert expected == post_proc.(posts)
 
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> having([p], min(p.count) < 3)
-    |> select([p], count(p.id)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> having([p], min(p.count) < 3)
+      |> select([p], count(p.id)) |> normalize |> Search.query
     expected = [2, 2]
     assert expected == post_proc.(posts)
 
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> having([p], sum(p.count) > avg(p.count))
-    |> select([p], count(p.id)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> having([p], sum(p.count) > avg(p.count))
+      |> select([p], count(p.id)) |> normalize |> Search.query
     expected = [2, 2]
     assert expected == post_proc.(posts)
     
     ## multiple clauses
-    {_, post_proc} = group_by(base, [p], p.title)
-    |> having([p], sum(p.count) > avg(p.count))
-    |> having([p], min(p.count) < 3)
-    |> select([p], count(p.id)) |> normalize |> Search.query
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> having([p], sum(p.count) > avg(p.count))
+      |> having([p], min(p.count) < 3)
+      |> select([p], count(p.id)) |> normalize |> Search.query
     expected = [2, 2]
     assert expected == post_proc.(posts)
 
     ## having without group_by
-    {_, post_proc} = having(base, [p], count(p.id) > 1)
-    |> select([p], p.id) |> normalize |> Search.query
+    { _, post_proc } = having(base, [p], count(p.id) > 1)
+      |> select([p], p.id) |> normalize |> Search.query
     expected = Enum.map(posts, &(&1.id)) |> Enum.sort
     assert expected == post_proc.(posts) |> Enum.sort
   end

@@ -1,7 +1,8 @@
-defmodule Ecto.Adapter.Riak.Object do
+defmodule Ecto.Adapters.Riak.Object do
   alias :riakc_obj, as: RiakObject
   alias Ecto.Adapter.Riak.JSON
   alias Ecto.Adapter.Riak.Search
+  alias Ecto.Adapter.Riak.Util, as: RiakUtil
 
   @type statebox    :: :statebox.statebox
   @type entity_type :: Ecto.Entity
@@ -16,18 +17,16 @@ defmodule Ecto.Adapter.Riak.Object do
 
   @spec entity_to_object(entity) :: object
   def entity_to_object(entity) do
-    module = elem(entity, 0)
-    model_name = entity.model |> to_string
-    fields = module.__entity__(:entity_kw, entity, primary_key: true)
+    fields = RiakUtil.entity_keyword(entity)
     fields = Enum.map(fields, fn({ k, v })->
-                                  {to_string(k) |> Search.yz_key, v}
+                                  { to_string(k) |> Search.yz_key, v }
                               end)
-    fields = [ { @key_model_name, model_name }, 
+    fields = [ { @key_model_name, to_string(entity.model) },
                { @key_statebox_ts, timestamp() }
                | fields ]
 
     ## Form riak object
-    bucket = model_name
+    bucket = RiakUtil.model_bucket(entity.model)
     key = entity.primary_key
     value = JSON.encode({ fields })
     object = RiakObject.new(bucket, key, value, @content_type)
@@ -40,6 +39,29 @@ defmodule Ecto.Adapter.Riak.Object do
         resolve_json(value)
       values ->
         resolve_siblings(values)
+    end
+  end
+
+  @doc """
+  Creates a globally unique primary key for an entity
+  if it didn't already exist. The format of the key will be
+
+    ${last_segment_of_model_name}_${random_bytes}
+
+  For example: the entity with model My.Great.ModelPost
+  may get the primary key: modelpost_AguvEw6232KACP7Mt/bKxbCa
+  """
+  @spec create_primary_key(entity) :: entity
+  def create_primary_key(entity) do
+    if is_binary(entity.primary_key) do
+      entity
+    else
+      rand_bytes = :crypto.rand_bytes(18) |> :base64.encode
+      last_segment = to_string(entity.model)
+        |> String.split(".")
+        |> List.last
+        |> String.downcase
+      entity.primary_key("#{last_segment}_#{rand_bytes}")
     end
   end
   
@@ -83,7 +105,7 @@ defmodule Ecto.Adapter.Riak.Object do
     ops = Enum.reduce(dict,
                       [],
                       fn({ k, v }, acc)->
-                          k = Search.key_from_yz(k) |> to_atom
+                          k = Search.key_from_yz(k) |> RiakUtil.to_atom
                           if is_list(v) do
                             ## add-wins behaviour
                             [:statebox_orddict.f_union(k,v) | acc]
@@ -97,7 +119,7 @@ defmodule Ecto.Adapter.Riak.Object do
   defp statebox_to_entity(statebox) do
     values = statebox.value
     model = :orddict.fetch(@sb_key_model_name, values)
-    module = to_atom("#{model}.Entity")
+    module = RiakUtil.to_atom("#{model}.Entity")
     
     ## Use module to get available fields 
     ## and create new entity
@@ -111,7 +133,7 @@ defmodule Ecto.Adapter.Riak.Object do
                                 end
                             end)
     |> Enum.filter(&(nil != &1))
-    |> model.new()
+    |> model.new
   end
 
   defp timestamp() do
@@ -123,19 +145,9 @@ defmodule Ecto.Adapter.Riak.Object do
     name_str = to_string(name)
     suffix = ".Entity"
     if String.ends_with?(name_str, suffix) do
-      name |> to_atom
+      name |> RiakUtil.to_atom
     else
-      (name_str <> suffix) |> to_atom
-    end
-  end
-
-  defp to_atom(x) when is_atom(x), do: x
-
-  defp to_atom(x) when is_binary(x) do
-    try do
-      binary_to_existing_atom(x)
-    catch
-      _,_ -> binary_to_atom(x)
+      (name_str <> suffix) |> RiakUtil.to_atom
     end
   end
 

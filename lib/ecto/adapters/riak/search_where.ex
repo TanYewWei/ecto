@@ -1,5 +1,5 @@
 defmodule Ecto.Adapters.Riak.SearchWhere  do
-  alias Ecto.Adapters.Riak.SearchUtil
+  alias Ecto.Adapters.Riak.Util, as: SearchUtil
   alias Ecto.Query.QueryExpr
   alias Ecto.Query.Util
   require Ecto.Adapters.Riak.Datetime, as: Datetime

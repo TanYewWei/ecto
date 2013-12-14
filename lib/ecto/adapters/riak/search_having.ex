@@ -1,5 +1,5 @@
 defmodule Ecto.Adapters.Riak.SearchHaving do
-  alias Ecto.Adapters.Riak.SearchUtil
+  alias Ecto.Adapters.Riak.Util, as: SearchUtil
 
   @type entity :: Ecto.Entity.t
   

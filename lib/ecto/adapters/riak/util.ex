@@ -2,12 +2,34 @@ defmodule Ecto.Adapters.Riak.Util do
   @type entity :: Ecto.Entity.t
 
   ## ----------------------------------------------------------------------
-  ## Search Schema
+  ## Search Schema and Buckets
   ## ----------------------------------------------------------------------e
 
-  def search_index(entity_module) do
-    Regex.replace(%r"^Elixir.|.Entity$", to_string(entity_module), "")
+  @doc """
+  Returns the bucket name for an Ecto Model.
+  Each bucket should only store one type of Ecto Model.
+  """
+  @spec model_bucket(atom) :: binary
+  def model_bucket(model) do
+    Regex.replace(%r"^Elixir.", to_string(model), "")
   end
+
+  @doc """
+  Returns the search index for an Ecto Model.
+  Each Model should have it's own search index
+  """
+  @spec model_search_index(atom) :: binary
+  def model_search_index(model) do
+    Regex.replace(%r"^Elixir.|.Entity$", to_string(model), "")
+  end
+
+  @doc """
+  Returns the name of the default Yokozuna search index
+  which comes pre-built in Riak 2.0pre5 and later
+  """
+  def default_search_schema(), do: "_yz_default"
+
+  def default_bucket_type(), do: "ecto_riak"
 
   ## ----------------------------------------------------------------------
   ## Key and Value De/Serialization
@@ -16,8 +38,8 @@ defmodule Ecto.Adapters.Riak.Util do
   @yz_key_regex  %r"_(i|is|f|fs|b|bs|b64_s|b64_ss|s|ss|i_dt|i_dts|dt|dts)$"
 
   @doc """
-  Removes the default YZ schema suffix from a key
-  schema: https://github.com/basho/yokozuna/blob/develop/priv/default_schema.xml
+  Removes the default YZ schema suffix from a key.
+  schema ref: https://github.com/basho/yokozuna/blob/develop/priv/default_schema.xml
   """
   @spec key_from_yz(binary) :: binary
   def key_from_yz(key) do
@@ -25,9 +47,9 @@ defmodule Ecto.Adapters.Riak.Util do
   end
 
   @doc """
-  adds a YZ schema suffix to a key depending on its type
+  Adds a YZ schema suffix to a key depending on its type.
   """
-  @spec yz_key(binary, atom | {:list, atom}) :: binary
+  @spec yz_key(binary, atom | { :list, atom }) :: binary
   def yz_key(key, type) do
     to_string(key) <> "_" <>
       case type do
@@ -38,7 +60,7 @@ defmodule Ecto.Adapters.Riak.Util do
         :boolean  -> "b"
         :datetime -> "dt"
         :interval -> "i_dt"
-        {:list, list_type} ->
+        { :list, list_type } ->
           case list_type do
             :integer  -> "is"
             :float    -> "fs"
@@ -67,13 +89,13 @@ defmodule Ecto.Adapters.Riak.Util do
       "b"      -> :boolean
       "dt"     -> :datetime
       "i_dt"   -> :interval
-      "is"     -> {:list, :integer}
-      "fs"     -> {:list, :float}
-      "b64_ss" -> {:list, :binary}
-      "ss"     -> {:list, :string}
-      "bs"     -> {:list, :boolean}
-      "dts"    -> {:list, :datetime}
-      "i_dts"  -> {:list, :interval}
+      "is"     -> { :list, :integer }
+      "fs"     -> { :list, :float }
+      "b64_ss" -> { :list, :binary }
+      "ss"     -> { :list, :string }
+      "bs"     -> { :list, :boolean }
+      "dts"    -> { :list, :datetime }
+      "i_dts"  -> { :list, :interval }
     end
   end
 
@@ -106,7 +128,7 @@ defmodule Ecto.Adapters.Riak.Util do
   ## ----------------------------------------------------------------------
 
   @doc """
-  Returns a keyword list of all fields of an entity
+  Returns a keyword list of all fields of an entity.
   """
   @spec entity_keyword(entity) :: Keyword.t
   def entity_keyword(entity) do

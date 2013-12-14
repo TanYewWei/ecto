@@ -13,7 +13,7 @@ defmodule Ecto.Integration.Riak.CustomAPI do
 end
 
 defmodule Ecto.Integration.Riak.TestRepo do
-  use Ecto.Repo, adapter: Ecto.Adapters.Postgres
+  use Ecto.Repo, adapter: Ecto.Adapters.Riak
 
   def priv do
     "integration_test/riak/ecto/priv"
@@ -21,7 +21,8 @@ defmodule Ecto.Integration.Riak.TestRepo do
 
   def url do
     [ "ecto://localhost:8100?max_count=10&init_count=3",
-      "ecto://localhost:8101?max_count=10&init_count=2" ]
+      "ecto://localhost:8101?max_count=10&init_count=2",
+      "ecto://localhost:8102?max_count=10&init_count=1" ]
   end
 
   def query_apis do
@@ -46,10 +47,10 @@ defmodule Ecto.Integration.Riak.Comment do
   use Ecto.Model
 
   queryable "comments" do
-    field :text, :string
-    field :posted, :datetime
+    field :text,     :string
+    field :posted,   :datetime
     field :interval, :interval
-    field :bytes, :binary
+    field :bytes,    :binary
     belongs_to :post, Ecto.Integration.Riak.Post
   end
 end
@@ -89,13 +90,17 @@ defmodule Ecto.Integration.Riak.Case do
   end
 
   setup do
-    :ok = Postgres.begin_test_transaction(TestRepo)
   end
 
   teardown do
-    :ok = Postgres.rollback_test_transaction(TestRepo)
   end
 end
+
+## ----------------------------------------------------------------------
+## Database Setup
+## ----------------------------------------------------------------------
+
+{ :ok, _ } = TestRepo.start_link
 
 setup_cmds = [
   %s(psql -U postgres -c "DROP DATABASE IF EXISTS ecto_test;"),

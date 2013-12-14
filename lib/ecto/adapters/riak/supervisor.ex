@@ -35,7 +35,7 @@ defmodule Ecto.Adapters.Riak.Supervisor do
   worker_opts can be one of:
   * `interval` - the time (in milliseconds) between each SchemaCheck
   """
-  def init({pool_opts, worker_opts}) do
+  def init({ pool_opts, worker_opts }) do
     case connect(pool_opts) do
       :ok ->
         interval = Key.get(worker_opts, :interval, @default_check_interval_ms)
@@ -56,7 +56,7 @@ defmodule Ecto.Adapters.Riak.Supervisor do
   
   @spec current_schema(repo) :: {:ok, schema}
   def current_schema(repo) do
-    ets_get(repo.__riak__(:schema))
+    :ok
   end
 
   @spec set_poll_interval(integer) :: [ :ok | {:error, pid} ]
@@ -85,19 +85,6 @@ defmodule Ecto.Adapters.Riak.Supervisor do
   
   defp check_schema(state) do
     state
-  end
-
-  ## ----------------------------------------------------------------------
-  ## ETS
-  ## ----------------------------------------------------------------------
-
-  defp ets_init() do    
-  end
-
-  defp ets_get(x) do
-  end
-
-  defp ets_set(x) do
   end
 
 end

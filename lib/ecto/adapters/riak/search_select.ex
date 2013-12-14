@@ -1,5 +1,5 @@
 defmodule Ecto.Adapters.Riak.SearchSelect do
-  alias Ecto.Adapters.Riak.SearchUtil
+  alias Ecto.Adapters.Riak.Util, as: SearchUtil
 
   ## Types
   

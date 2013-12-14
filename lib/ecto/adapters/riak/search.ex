@@ -12,7 +12,7 @@ defmodule Ecto.Adapters.Riak.Search do
   alias Ecto.Adapters.Riak.SearchHaving
   alias Ecto.Adapters.Riak.SearchSelect
   alias Ecto.Adapters.Riak.SearchWhere
-  alias Ecto.Adapters.Riak.SearchUtil
+  alias Ecto.Adapters.Riak.Util, as: SearchUtil
   alias Ecto.Query.Query
   alias Ecto.Query.Util
 
@@ -23,45 +23,45 @@ defmodule Ecto.Adapters.Riak.Search do
   @type bucket        :: binary
   @type entity        :: Ecto.Entity.t
   @type expr_field    :: atom  ## entity field reference
-  @type expr_var      :: {atom, list, list}
-  @type expr_order_by :: {:asc | :desc, expr_var, expr_field}
+  @type expr_var      :: { atom, list, list }
+  @type expr_order_by :: { :asc | :desc, expr_var, expr_field }
   @type query         :: Ecto.Query.t
   @type querystring   :: binary
   @type search_index  :: binary
-  @type query_tuple   :: {search_index, querystring, [search_option]}
-  @type name          :: {bucket        :: binary,
-                          entity_module :: atom,
-                          model_module  :: atom}
+  @type query_tuple   :: { search_index, bucket, querystring, [search_option] }
+  @type name          :: { bucket        :: binary,
+                           entity_module :: atom,
+                           model_module  :: atom}
 
   ## riak search result
   ## see -- https://github.com/basho/riak-erlang-client/blob/master/include/riakc.hrl
-  @type search_doc    :: {index :: binary,
-                          attr  :: [{binary, binary}]}
-  @type search_result :: {:search_result,
-                          docs :: [search_doc],
-                          max_score :: integer,
-                          num_found :: integer}
+  @type search_doc    :: { index :: binary,
+                           attr  :: [{binary, binary}] }
+  @type search_result :: { :search_result,
+                           docs :: [search_doc],
+                           max_score :: integer,
+                           num_found :: integer }
 
-  @type source        :: {{bucket :: binary, unique_name :: integer},
-                          entity_module :: atom,
-                          model_module  :: atom}
+  @type source        :: { { bucket :: binary, unique_name :: integer },
+                           entity_module :: atom,
+                           model_module  :: atom}
   
-  @type source_tuple  :: {{queryable :: binary,  ## the `x` in queryable x do ... end
-                           varname   :: binary}, ## unique query variable
-                          entity     :: atom,    ## entity module
-                          model      :: atom}    ## module module
-  @type search_option :: {:index, binary}
-                       | {:q, query :: binary}
-                       | {:df, default_field :: binary}
-                       | {:op, :and | :or}
-                       | {:start, integer} ## used for paging
-                       | {:rows, integer}  ## max number of results
-                       | {:sort, fieldname :: binary}
-                       | {:filter, filterquery :: binary}
-                       | {:presort, :key | :score}
+  @type source_tuple  :: { { queryable :: binary,   ## the `x` in queryable x do ... end
+                             varname   :: binary }, ## unique query variable
+                           entity     :: atom,      ## entity module
+                           model      :: atom}      ## module module
+  @type search_option :: { :index, binary }
+                       | { :q, query :: binary }
+                       | { :df, default_field :: binary }
+                       | { :op, :and | :or }
+                       | { :start, integer } ## used for paging
+                       | { :rows, integer }  ## max number of results
+                       | { :sort, fieldname :: binary }
+                       | { :filter, filterquery :: binary }
+                       | { :presort, :key | :score }
 
   ## post processing
-  @type post_proc_fun      :: ((entity) -> term)
+  @type post_proc_fun :: (([entity]) -> term)
 
   ## ----------------------------------------------------------------------
   ## Constants
@@ -112,10 +112,12 @@ defmodule Ecto.Adapters.Riak.Search do
   where post_proc_fun/1 should  be called on all results of
   the search query in the execute/3 function below.
   """        
-  @spec query(query) :: {{search_index, querystring, [search_option]}, post_proc_fun}
+  @spec query(query) :: { query_tuple, post_proc_fun }
   def query(Query[] = query) do    
     sources = create_names(query)  # :: [source]
-    search_index = Util.model(query.from) |> SearchUtil.search_index
+    model = Util.model(query.from)
+    search_index = SearchUtil.model_search_index(model)
+    bucket = SearchUtil.model_bucket(model)
     
     ## Check to see if join is specified
     ## and raise error if present
@@ -130,7 +132,7 @@ defmodule Ecto.Adapters.Riak.Search do
     querystring = Enum.join([where])
     options = List.flatten([order_by, limit, offset])
       |> Enum.filter(&(nil != &1))
-    query_part = {search_index, querystring, options}
+    query_part = { search_index, querystring, options }
 
     ## Build Post-processing function
     group_by = group_by(query.group_bys)
@@ -143,18 +145,39 @@ defmodule Ecto.Adapters.Riak.Search do
                 end
     
     ## DONE
-    {query_part, post_proc}
+    { query_part, post_proc }
   end
 
   @doc """
   Executes a search query using a provided worker pid,
   returning a list of valid entities (or an empty list)
   """
-  @spec execute(pid, {querystring, [search_option]}, post_proc_fun) :: [entity]
-  def execute(worker, {querystring, opts}, post_proc_fun) do
-    case Riak.search(worker, querystring, opts) do
-      {:ok, search_result} ->
-        ## see search_doc type
+  @spec execute(pid, query_tuple, post_proc_fun) :: [entity]
+  def execute(worker, query_tuple, post_proc_fun) do
+    { search_index, bucket, querystring, opts } = query_tuple
+    case Riak.search(worker, search_index, querystring, opts) do
+      ## -----------------------
+      ## Index doesn't yet exist
+      ## Attempt to create it and associate it
+      ## with the appropriate bucket for the model
+      { :error, "No index" <> _ } ->
+        schema = SearchUtil.default_search_schema()
+        case Riak.create_search_index(worker, search_index, schema, []) do
+          :ok ->
+            case Riak.set_search_index(worker, bucket, search_index) do
+              :ok ->
+                execute(worker, query_tuple, post_proc_fun)
+              _ ->
+                { :error, "failed to set search index '#{search_index}' on bucket '#{bucket}'" }
+            end
+          _ ->
+            { :error, "search index '#{search_index}' failed to be created" }
+        end        
+      
+      ## -----------------
+      ## Got Search Result
+      { :ok, search_result } ->
+        ## get search docs from erlang record representation
         search_docs = elem(search_result, 1)
 
         ## Reduce search_docs into a HashDict mapping
@@ -163,7 +186,7 @@ defmodule Ecto.Adapters.Riak.Search do
         doc_dict = Enum.reduce(search_docs,
                                HashDict.new,
                                fn(x, acc)->
-                                   {key, json} = parse_search_result(x)
+                                   { key, json } = parse_search_result(x)
                                    box = Object.resolve_json(json)
                                    fun = &([box | &1])
                                    HashDict.update(acc, key, [box], fun)
@@ -172,7 +195,7 @@ defmodule Ecto.Adapters.Riak.Search do
         ## Use doc_dict to resolve any duplicates (riak siblings).
         ## The resulting list is a list of entity objects
         resolved = Enum.map(HashDict.to_list(doc_dict),
-                            fn({_, box_list})->
+                            fn({ _, box_list })->
                                 :statebox_orddict.from_values(box_list)
                                 |> Object.statebox_to_entity
                             end)
@@ -181,11 +204,14 @@ defmodule Ecto.Adapters.Riak.Search do
         migrated = Enum.map(resolved, &Migration.migrate/1)
           
         ## Apply post_proc_fun and we're done
-        Enum.map(migrated, &post_proc_fun.(&1))
-      _ ->
-        []
+        post_proc_fun.(migrated)
+      
+      ## -------------
+      ## unknown error
+      rsn ->
+        rsn
     end
-  end  
+  end
 
   @spec parse_search_result(search_doc) :: {riak_key :: binary, json :: tuple}
   defp parse_search_result({_, doc}) do
