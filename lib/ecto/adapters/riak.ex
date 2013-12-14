@@ -8,6 +8,7 @@ defmodule Ecto.Adapters.Riak do
   @bucket_name  "50"
   @bucket_type  "map"
   @datatype_update_options [:create, :return_body]
+  @put_options [:return_body]
 
   alias Ecto.Query.Query
   alias Ecto.Query.QueryExpr
@@ -135,27 +136,38 @@ defmodule Ecto.Adapters.Riak do
   end
   
   @doc """
-  Stores a single new entity in the data store. And return a primary key
-  if one was created for the entity.
+  Stores a single new entity in the data store,
+  and returns the newly stored value
   """
-  @spec create(repo, entity) :: primary_key
+  @spec create(repo, entity) :: entity
   def create(repo, entity) do
     entity = RiakObj.create_primary_key(entity)
     object = RiakObj.entity_to_object(entity)
     fun = &Riak.put(&1, object)
     
-    case use_worker(repo, fun) do
-      { :ok, new_datatype } ->
-        :ok
+    case use_worker(repo, fun, @put_options) do
+      { :ok, new_object } ->
+        RiakObj.object_to_entity(new_object)
       _ ->
         nil
     end
   end  
 
   @doc """
-  Updates an entity using the primary key as key.
+  Updates an entity using the primary key as key,
+  returning a new entity.
   """
+  @spec update(repo, entity) :: entity
   def update(repo, entity) do
+    object = RiakObj.entity_to_object(entity)
+    fun = &Riak.put(&1, object, @put_options)
+
+    case use_worker(repo, fun) do
+      { :ok, new_object } ->
+        RiakObj.object_to_entity(new_object)
+      _ ->
+        nil
+    end
   end
 
   @doc """

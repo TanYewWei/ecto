@@ -38,7 +38,7 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
     e0 = mock_post()
     e1 = e0.title("test title 1")
     e1 = e1.count(7)
-    e2 = e0.rating(6)
+    e2 = e1.rating(6)
     
     ## Set timestamps
     ts_key = "_ts_i"
