@@ -11,17 +11,37 @@ defmodule Ecto.Adapters.Riak.Datetime do
   @type datetime  :: {date, time}
   @type timestamp :: {megasec::integer, sec::integer, microsec::integer}
   @type dt        :: date | time | datetime
-  @type ecto_dt   :: Ecto.Datetime.t
+  @type ecto_dt   :: Ecto.DateTime
+  @type ecto_int  :: Ecto.Interval
+  @type ecto_type :: ecto_dt | ecto_int
 
   @spec parse(binary) :: datetime
   def parse(x) do
-    :iso8601.parse(x)
+    [ year, month, day, hour, min, sec ] =
+      (String.split(x, %r"-|:|T|Z", trim: true)
+       |> Enum.map(fn(bin)->
+                       { int, _ } = Integer.parse(bin)
+                       int
+                   end))
+    case String.last(x) do
+      "Z" ->
+        { { year, month, day }, { hour, min, sec} }
+      _ ->
+        raise "invalid argument"
+    end
   end
 
-  @spec parse_to_ecto_datetime(binary) :: ecto_dt
+  @spec parse_to_ecto_datetime(binary) :: ecto_type
   def parse_to_ecto_datetime(x) do
-    {{year, mon, day}, {hour, min, sec}} = parse(x)
+    { { year, mon, day }, { hour, min, sec } } = parse(x)
     Ecto.DateTime.new(year: year, month: mon, day: day, 
+                      hour: hour, min: min, sec: sec)
+  end
+
+  @spec parse_to_ecto_interval(binary) :: ecto_type
+  def parse_to_ecto_interval(x) do
+    { { year, mon, day }, { hour, min, sec } } = parse(x)
+    Ecto.Interval.new(year: year, month: mon, day: day, 
                       hour: hour, min: min, sec: sec)
   end
   
@@ -70,13 +90,17 @@ defmodule Ecto.Adapters.Riak.Datetime do
     datetime_to_string({x,{0,0,0}})
   end
   
-  def datetime_to_string(x) when is_record(x, Ecto.Datetime) do
-    datetime_to_string({{x.year, x.month, x.day},
-                        {x.hour, x.min, x.second}})
+  def datetime_to_string(x) when is_record(x, Ecto.DateTime) do
+    ecto_type_to_datetime(x) |> datetime_to_string()
   end
 
-  def datetime_to_string(x) do
-    :iso8601.format(datetime_to_timestamp(x))
+  def datetime_to_string({ { year, month, day }, { hour, min, sec } }) do
+    "#{year}-#{month}-#{day}T#{hour}:#{min}:#{sec}Z"
+  end
+
+  def interval_to_string(x) when is_record(x, Ecto.Interval) do
+    { { year, month, day }, { hour, min, sec } } = ecto_type_to_datetime(x)
+    "#{year}-#{month}-#{day}T#{hour}:#{min}:#{sec}I"
   end
 
   @spec to_ecto_datetime(dt) :: ecto_dt
@@ -181,6 +205,18 @@ defmodule Ecto.Adapters.Riak.Datetime do
   def minute?(x), do: x >= 0 && x <= 59
 
   def second?(x), do: x >= 0 && x <= 59
+
+  ## ------------------------------------------------------------
+  ## Ecto Types
+  ## ------------------------------------------------------------
+  
+  def ecto_type_to_datetime(x)
+    when is_record(x, Ecto.DateTime) or is_record(x, Ecto.Interval) do
+    default = &(if nil?(&1), do: 0, else: &1)
+    date = { default.(x.year), default.(x.month), default.(x.day) }
+    time = { default.(x.hour), default.(x.min), default.(x.sec) }
+    { date, time }
+  end
 
   ## ------------------------------------------------------------
   ## Solr Specific

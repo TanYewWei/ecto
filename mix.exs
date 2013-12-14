@@ -28,8 +28,10 @@ defmodule Ecto.Mixfile do
       { :ej, github: "seth/ej", optional: true },
       { :iso8601, github: "seansawyer/erlang_iso8601", compile: "rebar compile", optional: true },
       { :jiffy, github: "davisp/jiffy", optional: true },
+      { :meck, github: "esl/meck", optional: true, override: true },
       { :pooler, github: "seth/pooler" , optional: true },
-      { :riakc, github: "basho/riak-erlang-client", optional: true } ]
+      { :riakc, github: "basho/riak-erlang-client", optional: true },
+      { :statebox, github: "mochi/statebox", optional: true } ]
   end
 
   defp deps(_) do

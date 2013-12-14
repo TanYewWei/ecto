@@ -1,6 +1,5 @@
-defmodule Riak.Adapter.Riak.JSON do
-
-  @type json :: {[ any ]}
+defmodule Ecto.Adapters.Riak.JSON do  
+  @type json      :: {[ any ]}
   
   def encode(x) do
     :jiffy.encode(x)
@@ -40,10 +39,6 @@ defmodule Riak.Adapter.Riak.JSON do
     :ej.delete(keys, json)
   end
 
-  def escape(x) when is_binary(x) do
-    x ##Regex.replace(%r"", x, )
-  end
-
   def valid?(x) do
     case x do
       { inner } ->
@@ -60,15 +55,19 @@ defmodule Riak.Adapter.Riak.JSON do
   end
 
   @doc "returns all keys on the current level of JSON object"
-  
+  @spec keys(json) :: [binary]
   def keys(x) do
-    {inner} = x
+    { inner } = x
     Enum.map(inner, fn({k,_})-> k end)
   end
 
+  @doc """
+  returns all values on the current level of the JSON object.
+  Ignores nested JSON objects, and casts   
+  """
   @spec values(json) :: [term]
   def values(x) do
-    {inner} = x
+    { inner } = x
     Enum.map(inner, fn({_,v})-> v end)
   end
 

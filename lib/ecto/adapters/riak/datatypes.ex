@@ -374,10 +374,10 @@ defmodule Ecto.Adapter.Riak.Datatypes do
   defp assoc_to_map(x) when is_record(x, Ecto.Reflections.HasMany) do
     member_ids = []
     map_new()
-    |> map_put({@assoc_key_type, :integer}, @assoc_type_has_many)
-    |> map_put({@assoc_key_primary_key, :string},
+    |> map_put({ @assoc_key_type, :integer }, @assoc_type_has_many)
+    |> map_put({ @assoc_key_primary_key, :string },
                x.primary_key |> atom_to_binary)
-    |> map_put({@assoc_key_foreign_key, :string},
+    |> map_put({ @assoc_key_foreign_key, :string },
                x.foreign_key |> atom_to_binary)
     |> map_put(@assoc_key_member_list, to_set(member_ids, :binary))
   end
@@ -385,18 +385,18 @@ defmodule Ecto.Adapter.Riak.Datatypes do
   defp assoc_to_map(x) when is_record(x, Ecto.Reflections.HasOne) do
     other_id = nil
     map_new()
-    |> map_put({@assoc_key_type, :integer}, @assoc_type_has_one)
-    |> map_put({@assoc_key_primary_key, :string},
+    |> map_put({ @assoc_key_type, :integer }, @assoc_type_has_one)
+    |> map_put({ @assoc_key_primary_key, :string },
                x.primary_key |> atom_to_binary)
-    |> map_put({@assoc_key_foreign_key, :string}, 
+    |> map_put({ @assoc_key_foreign_key, :string },
                x.foreign_key |> atom_to_binary)
-    |> map_put({@assoc_key_other_id, :binary}, other_id)
+    |> map_put({ @assoc_key_other_id, :binary }, other_id)
   end
 
   defp assoc_to_map(_), do: nil
 
   defp map_to_assoc(x) do
-    type = map_get(x, {@assoc_key_type, :integer})
+    type = map_get(x, { @assoc_key_type, :integer })
     case type do
       @assoc_type_has_many ->
         :ok
