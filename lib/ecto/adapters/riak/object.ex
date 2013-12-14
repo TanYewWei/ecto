@@ -89,8 +89,7 @@ defmodule Ecto.Adapters.Riak.Object do
 
   @spec resolve_siblings(binary) :: entity
   def resolve_siblings(values) do
-    stateboxes = Enum.map(values, &(JSON.decode(&1) |> resolve_json))
-    ##IO.puts(stateboxes)
+    stateboxes = Enum.map(values, &resolve_json/1)
     statebox = :statebox_orddict.from_values(stateboxes)
     statebox_to_entity(statebox)
   end

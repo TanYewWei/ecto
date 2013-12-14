@@ -9,7 +9,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   alias Ecto.UnitTest.Post
 
   defp test_query(query, expected) do
-    { { _, querystring, _ }, _ } = Search.query(query |> normalize)
+    { { _, _, querystring, _ }, _ } = Search.query(query |> normalize)
     assert expected == querystring
   end
 

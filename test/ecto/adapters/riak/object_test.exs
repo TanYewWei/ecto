@@ -3,6 +3,7 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
 
   alias Ecto.UnitTest.Post
   alias Ecto.Adapters.Riak.Datetime
+  alias Ecto.Adapters.Riak.JSON
   alias Ecto.Adapters.Riak.Object
   
   test "create_primary_key" do
@@ -39,9 +40,14 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
     e1 = e1.count(7)
     e2 = e0.rating(6)
     
-    j0 = Object.entity_to_object(e0) |> object_updatedvalue
-    j1 = Object.entity_to_object(e1) |> object_updatedvalue
-    j2 = Object.entity_to_object(e2) |> object_updatedvalue
+    ## Set timestamps
+    ts_key = "_ts_i"
+    j0 = Object.entity_to_object(e0) |> object_updatedvalue |> JSON.decode
+    j1 = Object.entity_to_object(e1) |> object_updatedvalue |> JSON.decode
+    j2 = Object.entity_to_object(e2) |> object_updatedvalue |> JSON.decode
+    t0 = JSON.get(j0, ts_key)
+    j1 = JSON.put(j1, ts_key, t0+1)
+    j2 = JSON.put(j2, ts_key, t0+2)
 
     ## e1 attributes should take precedence
     entity = Object.resolve_siblings([ j0, j1, j2 ])

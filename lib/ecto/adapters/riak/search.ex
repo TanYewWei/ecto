@@ -132,7 +132,7 @@ defmodule Ecto.Adapters.Riak.Search do
     querystring = Enum.join([where])
     options = List.flatten([order_by, limit, offset])
       |> Enum.filter(&(nil != &1))
-    query_part = { search_index, querystring, options }
+    query_part = { search_index, bucket, querystring, options }
 
     ## Build Post-processing function
     group_by = group_by(query.group_bys)
@@ -245,22 +245,7 @@ defmodule Ecto.Adapters.Riak.Search do
 
     ## Return
     {riak_key, json}
-  end
-  
-  """
-  Constructs a portion of the query which narrows down
-  search objects to be of a particular model,
-  and returns the variable names used in the from query
-  """
-  @spec from(name, source_tuple) :: {bucket, [vars :: binary]}
-  defp from(from, sources) do
-    from_model = Util.model(from)
-    IO.puts(to_string from_model)
-    source = tuple_to_list(sources)
-             |> Enum.find(&(from_model == Util.model(&1)))
-    {bucket, name} = Util.source(source)
-    {"_model_s:#{from_model}", [name]}
-  end
+  end 
 
   ## ----------------------------------------------------------------------
   ## JOIN
