@@ -45,7 +45,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     OpQueue.queue(fn()-> 
        [post] = TestRepo.all(from(p in Post) |> preload(:comments))
        comments = post.comments.to_list
-       IO.puts "comments: #{comments}"
+       IO.puts "comments: #{length comments}"
 
        [ if(post.id == p0.id, do: nil, else: "nonmatch post id"),
          if(post.title == p0.title, do: nil, else: "nonmatch post title"),

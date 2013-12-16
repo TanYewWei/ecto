@@ -319,8 +319,9 @@ defmodule Ecto.Entity do
     opts = opts
            |> Keyword.put_new(:references, :id)
            |> Keyword.put_new(:foreign_key, :"#{name}_id")
+           |> Keyword.put_new(:type, :integer)
 
-    __field__(mod, opts[:foreign_key], :string, [])
+    __field__(mod, opts[:foreign_key], opts[:type], [])
 
     assoc = Ecto.Associations.BelongsTo.__assoc__(:new, name, mod)
     __field__(mod, :"__#{name}__", :virtual, default: assoc)

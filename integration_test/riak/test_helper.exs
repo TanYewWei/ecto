@@ -45,6 +45,8 @@ defmodule Ecto.Integration.Riak.Post do
   end
 
   def version(), do: 0
+  def migrate_from_previous(x), do: x
+  def migrate_from_newer(x), do: x
 end
 
 defmodule Ecto.Integration.Riak.Comment do
@@ -56,10 +58,12 @@ defmodule Ecto.Integration.Riak.Comment do
     field :interval, :interval
     field :bytes,    :binary
     field :version,  :integer, default: 0
-    belongs_to :post, Ecto.Integration.Riak.Post
+    belongs_to :post, Ecto.Integration.Riak.Post, type: :string
   end
 
   def version(), do: 0
+  def migrate_from_previous(x), do: x
+  def migrate_from_newer(x), do: x
 end
 
 defmodule Ecto.Integration.Riak.Permalink do
@@ -68,10 +72,12 @@ defmodule Ecto.Integration.Riak.Permalink do
   queryable "permalinks" do
     field :url, :string
     field :version,  :integer, default: 0
-    belongs_to :post, Ecto.Integration.Riak.Post
+    belongs_to :post, Ecto.Integration.Riak.Post, type: :string
   end
 
   def version(), do: 0
+  def migrate_from_previous(x), do: x
+  def migrate_from_newer(x), do: x
 end
 
 defmodule Ecto.Integration.Riak.Custom do
@@ -83,6 +89,8 @@ defmodule Ecto.Integration.Riak.Custom do
   end
 
   def version(), do: 0
+  def migrate_from_previous(x), do: x
+  def migrate_from_newer(x), do: x
 end
 
 defmodule Ecto.Integration.Riak.Case do
