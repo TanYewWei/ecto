@@ -13,6 +13,12 @@ defmodule Ecto.Adapters.Riak.SearchTest do
     assert expected == querystring
   end
 
+  test "from" do
+    query = from(p in Post)
+    { {_,_,querystring,_}, _ } = Search.query(query)
+    assert "*:*" == query
+  end
+
   test "where clause" do
     base = from(p in Post)
 

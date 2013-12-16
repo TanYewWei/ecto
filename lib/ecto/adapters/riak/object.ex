@@ -11,10 +11,10 @@ defmodule Ecto.Adapters.Riak.Object do
   @type json        :: JSON.json
   @type object      :: :riakc_obj.object
 
-  @content_type         "application/json"
-  @sb_key_model_name    :_model
-  @json_key_model_name  "_model_s"
-  @json_key_statebox_ts "_ts_i"
+  @content_type         'application/json'
+  @sb_key_model_name    :ectomodel
+  @json_key_model_name  "ectomodel_s"
+  @json_key_statebox_ts "ectots_l"
 
   @spec entity_to_object(entity) :: object
   def entity_to_object(entity) do
@@ -31,9 +31,11 @@ defmodule Ecto.Adapters.Riak.Object do
           :base64.encode(v.value)
         true ->
           JSON.maybe_null(v)
+          #v
       end
       { key, val }
     end)
+    fields = Enum.filter(fields, fn({ _, v })-> v != nil end)
     fields = [ { @json_key_model_name, to_string(entity.model) },
                { @json_key_statebox_ts, timestamp() }
                | fields ]
@@ -61,24 +63,16 @@ defmodule Ecto.Adapters.Riak.Object do
 
   @doc """
   Creates a globally unique primary key for an entity
-  if it didn't already exist. The format of the key will be
-
-    ${last_segment_of_model_name}_${random_bytes}
-
-  For example: the entity with model My.Great.ModelPost
-  may get the primary key: modelpost_AguvEw6232KACP7Mt/bKxbCa
+  if it didn't already exist.
   """
   @spec create_primary_key(entity) :: entity
   def create_primary_key(entity) do
     if is_binary(entity.primary_key) do
       entity
     else
-      rand_bytes = :crypto.rand_bytes(18) |> :base64.encode
-      last_segment = to_string(entity.model)
-        |> String.split(".")
-        |> List.last
-        |> String.downcase
-      entity.primary_key("#{last_segment}_#{rand_bytes}")
+      :crypto.rand_bytes(18)
+        |> :base64.encode
+        |> entity.primary_key
     end
   end 
 
@@ -94,6 +88,9 @@ defmodule Ecto.Adapters.Riak.Object do
     statebox_to_entity(statebox)
   end
 
+  @doc """
+  Takes a 
+  """
   @spec resolve_json(json) :: statebox
   def resolve_json(nil), do: nil
 
@@ -126,6 +123,7 @@ defmodule Ecto.Adapters.Riak.Object do
                             ## add-wins behaviour
                             [:statebox_orddict.f_union(k,v) | acc]
                           else
+                            v = JSON.maybe_nil(v)
                             [:statebox_orddict.f_store(k,v) | acc]
                           end
                       end)
@@ -136,7 +134,7 @@ defmodule Ecto.Adapters.Riak.Object do
     set_elem(statebox, 3, timestamp)  ## 3rd element is timestamp    
   end
 
-  defp statebox_to_entity(statebox) do
+  def statebox_to_entity(statebox) do
     values = statebox.value
     model = Dict.get(values, @sb_key_model_name) |> RiakUtil.to_atom
     entity_module = entity_name_from_model(model)
@@ -161,7 +159,8 @@ defmodule Ecto.Adapters.Riak.Object do
   defp ecto_value(val, type) do
     case type do
       :binary ->
-        Ecto.Binary[value: :base64.decode(val)]
+        val = if is_binary(val), do: :base64.decode(val), else: nil
+        Ecto.Binary[value: val]
       :datetime ->
         Datetime.parse_to_ecto_datetime(val)
       :interval ->

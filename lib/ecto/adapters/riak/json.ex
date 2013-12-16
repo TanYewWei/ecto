@@ -78,7 +78,7 @@ defmodule Ecto.Adapters.Riak.JSON do
 
   @doc "Substitutes JSON :null for elixir nil"
   def maybe_nil(x) do
-    if(x == :null, do: nil, else: x)
+    if(x == :null || x == "null", do: nil, else: x)
   end
 
 end

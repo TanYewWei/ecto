@@ -16,6 +16,7 @@ defmodule Ecto.Adapters.Riak.Datetime do
   @type ecto_type :: ecto_dt | ecto_int
 
   @spec parse(binary) :: datetime
+  def parse(nil), do: nil
   def parse(x) do
     [ year, month, day, hour, min, sec ] =
       (String.split(x, %r"-|:|T|Z", trim: true)
@@ -33,16 +34,22 @@ defmodule Ecto.Adapters.Riak.Datetime do
 
   @spec parse_to_ecto_datetime(binary) :: ecto_type
   def parse_to_ecto_datetime(x) do
-    { { year, mon, day }, { hour, min, sec } } = parse(x)
-    Ecto.DateTime.new(year: year, month: mon, day: day, 
-                      hour: hour, min: min, sec: sec)
+    case parse(x) do
+      nil -> nil
+      { { year, mon, day }, { hour, min, sec } } ->
+        Ecto.DateTime.new(year: year, month: mon, day: day, 
+                          hour: hour, min: min, sec: sec)
+    end
   end
 
   @spec parse_to_ecto_interval(binary) :: ecto_type
   def parse_to_ecto_interval(x) do
-    { { year, mon, day }, { hour, min, sec } } = parse(x)
-    Ecto.Interval.new(year: year, month: mon, day: day, 
-                      hour: hour, min: min, sec: sec)
+    case parse(x) do
+      nil -> nil
+      { { year, mon, day }, { hour, min, sec } } ->
+        Ecto.Interval.new(year: year, month: mon, day: day, 
+                          hour: hour, min: min, sec: sec)
+    end
   end
   
   @spec compare(datetime, datetime) :: boolean

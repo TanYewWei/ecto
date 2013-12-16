@@ -12,9 +12,10 @@ defmodule Ecto.Adapters.Riak.Search do
   alias Ecto.Adapters.Riak.SearchHaving
   alias Ecto.Adapters.Riak.SearchSelect
   alias Ecto.Adapters.Riak.SearchWhere
-  alias Ecto.Adapters.Riak.Util, as: SearchUtil
+  alias Ecto.Adapters.Riak.Util, as: RiakUtil
   alias Ecto.Query.Query
   alias Ecto.Query.Util
+  alias :riakc_pb_socket, as: RiakSocket
 
   ## ----------------------------------------------------------------------
   ## Types
@@ -116,8 +117,8 @@ defmodule Ecto.Adapters.Riak.Search do
   def query(Query[] = query) do    
     sources = create_names(query)  # :: [source]
     model = Util.model(query.from)
-    search_index = SearchUtil.model_search_index(model)
-    bucket = SearchUtil.model_bucket(model)
+    search_index = RiakUtil.model_search_index(model)
+    bucket = RiakUtil.model_bucket(model)
     
     ## Check to see if join is specified
     ## and raise error if present
@@ -125,11 +126,14 @@ defmodule Ecto.Adapters.Riak.Search do
 
     ## Build Query Part
     where    = SearchWhere.query(query.wheres, sources)    
-    order_by = order_by(query.order_bys)
+    order_by = order_by(query.order_bys, sources)
     limit    = limit(query.limit)
     offset   = offset(query.offset)
     
+    ## querystring defaults to all results
     querystring = Enum.join([where])
+    querystring = if querystring == "", do: "*:*", else: querystring 
+    
     options = List.flatten([order_by, limit, offset])
       |> Enum.filter(&(nil != &1))
     query_part = { search_index, bucket, querystring, options }
@@ -155,16 +159,20 @@ defmodule Ecto.Adapters.Riak.Search do
   @spec execute(pid, query_tuple, post_proc_fun) :: [entity]
   def execute(worker, query_tuple, post_proc_fun) do
     { search_index, bucket, querystring, opts } = query_tuple
-    case Riak.search(worker, search_index, querystring, opts) do
+    # IO.puts("search worker: #{worker}")
+    # IO.puts("search index: #{search_index}")
+    # IO.puts("search qs: #{querystring}")
+    # IO.puts("search opts: #{inspect opts}")
+    case RiakSocket.search(worker, search_index, querystring, opts) do
       ## -----------------------
       ## Index doesn't yet exist
       ## Attempt to create it and associate it
       ## with the appropriate bucket for the model
       { :error, "No index" <> _ } ->
-        schema = SearchUtil.default_search_schema()
-        case Riak.create_search_index(worker, search_index, schema, []) do
+        schema = RiakUtil.default_search_schema()
+        case RiakSocket.create_search_index(worker, search_index, schema, []) do
           :ok ->
-            case Riak.set_search_index(worker, bucket, search_index) do
+            case RiakSocket.set_search_index(worker, bucket, search_index) do
               :ok ->
                 execute(worker, query_tuple, post_proc_fun)
               _ ->
@@ -177,6 +185,7 @@ defmodule Ecto.Adapters.Riak.Search do
       ## -----------------
       ## Got Search Result
       { :ok, search_result } ->
+        ##IO.puts("search #{inspect query_tuple} got: #{inspect search_result}")
         ## get search docs from erlang record representation
         search_docs = elem(search_result, 1)
 
@@ -186,10 +195,14 @@ defmodule Ecto.Adapters.Riak.Search do
         doc_dict = Enum.reduce(search_docs,
                                HashDict.new,
                                fn(x, acc)->
-                                   { key, json } = parse_search_result(x)
-                                   box = Object.resolve_json(json)
-                                   fun = &([box | &1])
-                                   HashDict.update(acc, key, [box], fun)
+                                   case parse_search_result(x) do
+                                     { key, json } ->
+                                       box = Object.resolve_json(json)
+                                       fun = &([box | &1])
+                                       HashDict.update(acc, key, [box], fun)
+                                     _ ->
+                                       acc
+                                   end
                                end)
 
         ## Use doc_dict to resolve any duplicates (riak siblings).
@@ -213,16 +226,17 @@ defmodule Ecto.Adapters.Riak.Search do
     end
   end
 
-  @spec parse_search_result(search_doc) :: {riak_key :: binary, json :: tuple}
-  defp parse_search_result({_, doc}) do
+  @spec parse_search_result(search_doc) :: { riak_key :: binary, 
+                                             json     :: tuple}
+  defp parse_search_result({ _, doc }) do
     riak_key = Dict.get(doc, @yz_riak_key)
-    json =
+    proplist =
       ## Filter out YZ keys
       Enum.filter(doc, fn(x)-> ! (x in @yz_meta_keys) end)
     
-      ## Riak Search returns list values as multiple key-value tuples
+      ## Riak Search returns list values as multiple key-value tuples.
+      ## Any duplicate keys should have their values put into a list
       ## ie: { "a":[1,2] } gets returned as: [{"a",1}, {"a",2}]
-      ## Any duplicate keys should put their values into a list
       |> Enum.reduce(HashDict.new(),
                      fn({k,v}, acc)->
                          fun = fn(existing)->
@@ -244,8 +258,15 @@ defmodule Ecto.Adapters.Riak.Search do
       |> Enum.filter(fn({_,v})-> v != nil end)
 
     ## Return
-    {riak_key, json}
-  end 
+    case Dict.get(proplist, "ectomodel_s") do
+      nil ->
+        nil
+      _ ->
+        ##IO.puts("proplist: #{inspect proplist}")
+        json = { proplist }
+        {riak_key, json}
+    end
+  end
 
   ## ----------------------------------------------------------------------
   ## JOIN
@@ -296,7 +317,7 @@ defmodule Ecto.Adapters.Riak.Search do
     fn(entities)->
         fun = fn(entity, dict)->
                   ## Get values using fields to create key tuple
-                  entity_kw = SearchUtil.entity_keyword(entity)
+                  entity_kw = RiakUtil.entity_keyword(entity)
                   values = Enum.map(fields, &(entity_kw[&1]))
                   key = list_to_tuple(values)
                   HashDict.update(dict, key, [entity], fn(e)-> [entity | e] end)
@@ -310,23 +331,26 @@ defmodule Ecto.Adapters.Riak.Search do
   ## ORDER BY, LIMIT, and OFFSET
   ## ----------------------------------------------------------------------
 
-  @spec order_by(expr_order_by) :: {:sort, binary}
+  @spec order_by(expr_order_by, [source]) :: { :sort, binary }
   
   defp order_by([]), do: nil
 
-  defp order_by(order_bys) do
+  defp order_by(order_bys, sources) do
     ## constructs the "sort" option to Yokozuna
     ## docs -- http://wiki.apache.org/solr/CommonQueryParameters#sort
     querystring =
       Enum.map_join(order_bys, ", ", 
                     fn(expr)->
-                        Enum.map_join(expr.expr, ", ", &order_by_expr(&1))
+                        Enum.map_join(expr.expr, ", ", &order_by_expr(&1, sources))
                     end)
-    {:sort, querystring}
+    { :sort, querystring }
   end
 
-  defp order_by_expr({direction, _, field}) do
-    str = "#{field}"
+  defp order_by_expr({ direction, var, field }, sources) do
+    source = Util.find_source(sources, var)
+    entity = Util.entity(source)
+    field_type = entity.__entity__(:field_type, field)
+    str = RiakUtil.yz_key("#{field}", field_type)
     str <> case direction do
              :asc  -> " asc"
              :desc -> " desc"

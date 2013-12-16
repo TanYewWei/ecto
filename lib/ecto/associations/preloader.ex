@@ -42,7 +42,9 @@ defmodule Ecto.Associations.Preloader do
 
     # Query for the associated entities
     query = preload_query(records, refl)
+    IO.puts("preload query: #{inspect query}")
     associated = repo.all(query)
+    IO.puts("preload assoc: #{inspect associated}")
 
     # Recurse down nested fields
     associated = Enum.reduce(sub_fields, associated, &do_run(&2, repo, &1))

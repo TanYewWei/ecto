@@ -320,7 +320,7 @@ defmodule Ecto.Entity do
            |> Keyword.put_new(:references, :id)
            |> Keyword.put_new(:foreign_key, :"#{name}_id")
 
-    __field__(mod, opts[:foreign_key], :integer, [])
+    __field__(mod, opts[:foreign_key], :string, [])
 
     assoc = Ecto.Associations.BelongsTo.__assoc__(:new, name, mod)
     __field__(mod, :"__#{name}__", :virtual, default: assoc)

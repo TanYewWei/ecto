@@ -2,8 +2,9 @@ ExUnit.start
 
 Code.require_file "../../test/support/file_helpers.exs", __DIR__
 
-alias Ecto.Adapters.Riak
+alias Ecto.Adapters.Riak.Util, as: RiakUtil
 alias Ecto.Integration.Riak.TestRepo
+alias :riakc_pb_socket, as: RiakSocket
 
 defmodule Ecto.Integration.Riak.CustomAPI do
   use Ecto.Query.Typespec
@@ -20,56 +21,68 @@ defmodule Ecto.Integration.Riak.TestRepo do
   end
 
   def url do
-    [ "ecto://localhost:8100?max_count=10&init_count=3",
-      "ecto://localhost:8101?max_count=10&init_count=2",
-      "ecto://localhost:8102?max_count=10&init_count=1" ]
+    [ "ecto://test@127.0.0.1:8001/test?max_count=10&init_count=3",
+      "ecto://test@127.0.0.1:8001/test?max_count=10&init_count=2",
+      "ecto://test@127.0.0.1:8002/test?max_count=10&init_count=1" ]
   end
 
   def query_apis do
-    [Ecto.Integration.Postgres.CustomAPI, Ecto.Query.API]
+    [ Ecto.Integration.Riak.CustomAPI, Ecto.Query.API ]
   end
 end
 
 defmodule Ecto.Integration.Riak.Post do
-  use Ecto.Model
+  use Ecto.RiakModel
 
   queryable "posts" do
     field :title, :string
     field :text, :string
     field :temp, :virtual, default: "temp"
     field :count, :integer
+    field :version,  :integer, default: 0
     has_many :comments, Ecto.Integration.Riak.Comment
     has_one :permalink, Ecto.Integration.Riak.Permalink
   end
+
+  def version(), do: 0
 end
 
 defmodule Ecto.Integration.Riak.Comment do
-  use Ecto.Model
+  use Ecto.RiakModel
 
   queryable "comments" do
     field :text,     :string
     field :posted,   :datetime
     field :interval, :interval
     field :bytes,    :binary
+    field :version,  :integer, default: 0
     belongs_to :post, Ecto.Integration.Riak.Post
   end
+
+  def version(), do: 0
 end
 
 defmodule Ecto.Integration.Riak.Permalink do
-  use Ecto.Model
+  use Ecto.RiakModel
 
   queryable "permalinks" do
     field :url, :string
+    field :version,  :integer, default: 0
     belongs_to :post, Ecto.Integration.Riak.Post
   end
+
+  def version(), do: 0
 end
 
 defmodule Ecto.Integration.Riak.Custom do
-  use Ecto.Model
+  use Ecto.RiakModel
 
   queryable "customs", primary_key: false do
+    field :version,  :integer, default: 0
     field :foo, :string, primary_key: true
   end
+
+  def version(), do: 0
 end
 
 defmodule Ecto.Integration.Riak.Case do
@@ -88,67 +101,36 @@ defmodule Ecto.Integration.Riak.Case do
       alias Ecto.Integration.Riak.Custom
     end
   end
-
-  setup do
-  end
-
-  teardown do
-  end
 end
 
 ## ----------------------------------------------------------------------
-## Database Setup
+## Setup
 ## ----------------------------------------------------------------------
 
 { :ok, _ } = TestRepo.start_link
 
-setup_cmds = [
-  %s(psql -U postgres -c "DROP DATABASE IF EXISTS ecto_test;"),
-  %s(psql -U postgres -c "CREATE DATABASE ecto_test ENCODING='UTF8' LC_COLLATE='en_US.UTF-8' LC_CTYPE='en_US.UTF-8';")
-]
+## Delete all test data
+{ :ok, socket } = RiakSocket.start_link('127.0.0.1', 8000)
 
-Enum.each(setup_cmds, fn(cmd) ->
-  key = :ecto_setup_cmd_output
-  Process.put(key, "")
-  status = Mix.Shell.cmd(cmd, fn(data) ->
-    current = Process.get(key)
-    Process.put(key, current <> data)
+posts_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Post)
+comments_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Comment)
+permalinks_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Permalink)
+custom_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Custom)
+buckets = [ posts_bucket, comments_bucket, permalinks_bucket, custom_bucket ]
+
+IO.puts """
+----------------------------------------------------------------------
+Deleting test buckets and search indexes
+
+This will take 2-3 seconds
+----------------------------------------------------------------------
+"""
+Enum.map(buckets, fn(bucket)->
+  :ok == RiakSocket.reset_bucket(socket, bucket)
+  ##:ok == RiakSocket.delete_search_index(socket, bucket)
+  { :ok, keys } = RiakSocket.list_keys(socket, bucket)
+  res = Enum.map(keys, fn(key)->
+    :ok == RiakSocket.delete(socket, bucket, key)
   end)
-
-  if status != 0 do
-    IO.puts """
-    Test setup command error'd:
-
-        #{cmd}
-
-    With:
-
-        #{Process.get(key)}
-    Please verify the user "postgres" exists and it has permissions
-    to create databases. If not, you can create a new user with:
-
-        createuser postgres --no-password -d
-    """
-    System.halt(1)
-  end
-end)
-
-setup_database = [
-  "CREATE TABLE posts (id serial PRIMARY KEY, title varchar(100), text varchar(100), count integer)",
-  "CREATE TABLE comments (id serial PRIMARY KEY, text varchar(100), posted timestamp, interval interval, bytes bytea, post_id integer)",
-  "CREATE TABLE permalinks (id serial PRIMARY KEY, url varchar(100), post_id integer)",
-  "CREATE TABLE customs (foo text PRIMARY KEY)",
-  "CREATE TABLE transaction (id serial, text text)",
-  "CREATE FUNCTION custom(integer) RETURNS integer AS 'SELECT $1 * 10;' LANGUAGE SQL"
-]
-
-{ :ok, _pid } = TestRepo.start_link
-
-Enum.each(setup_database, fn(sql) ->
-  result = Postgres.query(TestRepo, sql)
-  if match?({ :error, _ }, result) do
-    IO.puts("Test database setup SQL error'd: `#{sql}`")
-    IO.inspect(result)
-    System.halt(1)
-  end
+  ##IO.puts("setup deleted test bucket #{bucket} => #{Enum.all?(res, &(true == &1))}")
 end)
