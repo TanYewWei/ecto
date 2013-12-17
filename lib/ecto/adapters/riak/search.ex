@@ -163,55 +163,54 @@ defmodule Ecto.Adapters.Riak.Search do
     # IO.puts("search index: #{search_index}")
     # IO.puts("search qs: #{querystring}")
     # IO.puts("search opts: #{inspect opts}")
-    case RiakSocket.search(worker, search_index, querystring, opts) do
-      ## -----------------------
-      ## Index doesn't yet exist
-      ## Attempt to create it and associate it
-      ## with the appropriate bucket for the model
-      { :error, "No index" <> _ } ->
-        schema = RiakUtil.default_search_schema()
-        case RiakSocket.create_search_index(worker, search_index, schema, []) do
-          :ok ->
-            case RiakSocket.set_search_index(worker, bucket, search_index) do
-              :ok ->
-                execute(worker, query_tuple, post_proc_fun)
-              _ ->
-                { :error, "failed to set search index '#{search_index}' on bucket '#{bucket}'" }
-            end
-          _ ->
-            { :error, "search index '#{search_index}' failed to be created" }
-        end        
-      
+    case RiakSocket.search(worker, search_index, querystring, opts) do      
       ## -----------------
       ## Got Search Result
       { :ok, search_result } ->
         ##IO.puts("search #{inspect query_tuple} got: #{inspect search_result}")
         ## get search docs from erlang record representation
         search_docs = elem(search_result, 1)
-
+       
+        resolved =
+          Enum.map(search_docs,
+                   fn(x)->
+                       case parse_search_result(x) do
+                         { _, json } ->
+                           Object.resolve_json(json)
+                           |> Object.statebox_to_entity
+                         _ ->
+                           nil
+                       end
+                   end)
+          |> Enum.filter(&(nil != &1))
+          |> Enum.uniq(fn(x)-> x.primary_key end)  ## just drop for now
+        
+        ## (Obsolete once CRDTs are available)
         ## Reduce search_docs into a HashDict mapping
         ## the riak object key to a list of stateboxes which
         ## can be used for sibling resolution
-        doc_dict = Enum.reduce(search_docs,
-                               HashDict.new,
-                               fn(x, acc)->
-                                   case parse_search_result(x) do
-                                     { key, json } ->
-                                       box = Object.resolve_json(json)
-                                       fun = &([box | &1])
-                                       HashDict.update(acc, key, [box], fun)
-                                     _ ->
-                                       acc
-                                   end
-                               end)
+        # {_, doc_dict} = 
+        #   Enum.reduce(search_docs,
+        #               HashDict.new,
+        #               fn(x, acc)-> 
+        #                   case parse_search_result(x) do
+        #                     { key, json } ->
+        #                       box = Object.resolve_json(json)
+        #                       fun = &([box | &1])
+        #                       HashDict.update(acc, key, [box], fun)
+        #                     _ ->
+        #                       acc
+        #                   end
+        #               end)
 
         ## Use doc_dict to resolve any duplicates (riak siblings).
         ## The resulting list is a list of entity objects
-        resolved = Enum.map(HashDict.to_list(doc_dict),
-                            fn({ _, box_list })->
-                                :statebox_orddict.from_values(box_list)
-                                |> Object.statebox_to_entity
-                            end)
+        # resolved =
+        #   Enum.map(HashDict.to_list(doc_dict),
+        #            fn({ _, box_list })->
+        #                :statebox_orddict.from_values(box_list)
+        #                |> Object.statebox_to_entity
+        #            end)
 
         ## Perform any migrations if needed
         migrated = Enum.map(resolved, &Migration.migrate/1)
@@ -264,7 +263,7 @@ defmodule Ecto.Adapters.Riak.Search do
       _ ->
         ##IO.puts("proplist: #{inspect proplist}")
         json = { proplist }
-        {riak_key, json}
+        { riak_key, json }
     end
   end
 
@@ -394,6 +393,49 @@ defmodule Ecto.Adapters.Riak.Search do
     else
       counted_name
     end
+  end
+
+  ## ----------------------------------------------------------------------
+  ## Search Schema and Index
+  ## ----------------------------------------------------------------------
+
+  @doc """
+  Creates and sets search indexes.
+  Called during Ecto.Adapters.Riak.start_link
+  and can be called manually to re-enforce search index changes.
+  """
+  def search_index_reload_all(socket) do
+    models = riak_models()
+    Enum.map(models, fn(model)->
+      {model, search_index_reload(socket, model)}
+    end)
+  end
+
+  def search_index_reload(socket, model) do
+    schema = RiakUtil.default_search_schema()
+    search_index = RiakUtil.model_search_index(model)
+    case RiakSocket.create_search_index(socket, search_index, schema, []) do
+      :ok ->
+        bucket = RiakUtil.model_bucket(model)
+        case RiakSocket.set_search_index(socket, bucket, search_index) do
+          :ok ->
+            IO.puts("set search index for bucket: #{bucket}, index: #{search_index}")
+            :ok
+          _ ->
+            { :error, "failed to set search index '#{search_index}' on bucket '#{bucket}'" }
+        end
+      _ ->
+        { :error, "search index '#{search_index}' failed to be created" }
+    end
+  end
+
+  defp riak_models() do
+    ## returns all models 
+    modules = :code.all_loaded
+      |> Enum.filter(fn({ mod, _ })->
+                         function_exported?(mod, :__model__, 1)
+                     end)
+      |> Enum.map(fn({ mod, _ })-> mod end)
   end
   
 end

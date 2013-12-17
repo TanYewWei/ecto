@@ -21,8 +21,8 @@ defmodule Ecto.Integration.Riak.TestRepo do
   end
 
   def url do
-    [ "ecto://test@127.0.0.1:8001/test?max_count=10&init_count=3",
-      "ecto://test@127.0.0.1:8001/test?max_count=10&init_count=2",
+    [ "ecto://test@127.0.0.1:8000/test?max_count=10&init_count=1",
+      "ecto://test@127.0.0.1:8001/test?max_count=10&init_count=1",
       "ecto://test@127.0.0.1:8002/test?max_count=10&init_count=1" ]
   end
 
@@ -107,6 +107,8 @@ defmodule Ecto.Integration.Riak.Case do
       alias Ecto.Integration.Riak.Comment
       alias Ecto.Integration.Riak.Permalink
       alias Ecto.Integration.Riak.Custom
+      alias Ecto.Adapters.Riak.Util, as: RiakUtil
+      alias :riakc_pb_socket, as: RiakSocket
     end
   end
 end
@@ -115,30 +117,19 @@ end
 ## Setup
 ## ----------------------------------------------------------------------
 
-{ :ok, _ } = TestRepo.start_link
-
-## Delete all test data
-{ :ok, socket } = RiakSocket.start_link('127.0.0.1', 8000)
-
 posts_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Post)
 comments_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Comment)
 permalinks_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Permalink)
 custom_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Custom)
 buckets = [ posts_bucket, comments_bucket, permalinks_bucket, custom_bucket ]
 
-IO.puts """
-----------------------------------------------------------------------
-Deleting test buckets and search indexes
-
-This will take 2-3 seconds
-----------------------------------------------------------------------
-"""
+{ :ok, socket } = RiakSocket.start_link('127.0.0.1', 8000)
 Enum.map(buckets, fn(bucket)->
-  :ok == RiakSocket.reset_bucket(socket, bucket)
-  ##:ok == RiakSocket.delete_search_index(socket, bucket)
+  :ok = RiakSocket.reset_bucket(socket, bucket)
   { :ok, keys } = RiakSocket.list_keys(socket, bucket)
-  res = Enum.map(keys, fn(key)->
+  Enum.map(keys, fn(key)->
     :ok == RiakSocket.delete(socket, bucket, key)
   end)
-  ##IO.puts("setup deleted test bucket #{bucket} => #{Enum.all?(res, &(true == &1))}")
 end)
+
+{ :ok, _ } = TestRepo.start_link

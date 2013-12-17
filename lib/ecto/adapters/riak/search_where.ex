@@ -12,6 +12,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   ## API
 
   def query(wheres, sources) do
+    #IO.puts("where query: #{inspect wheres}, sources: #{inspect sources}")
     Enum.map_join(wheres,
                   " ",
                   fn(QueryExpr[expr: expr])->
@@ -19,7 +20,10 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
                   end)
   end
 
+  # {:like, [line: 29], [{{:., [], [{:&, [], [0]}, :title]}, [], []}, "title"]}
+
   defp where_expr({:., _, [{:&, _, [_]}=var, field]}, sources) when is_atom(field) do
+    #IO.puts("var: #{inspect var}, sources: #{inspect sources}")
     source = Util.find_source(sources, var)
     entity = Util.entity(source)
     type = entity.__entity__(:field_type, field)
@@ -152,8 +156,8 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
             left <> " AND " <> right
           :or ->
             left <> " OR " <> right
-          :like ->
-            left <> ":*" <> right <> "*"
+          #:like ->
+           # left <> ":*" <> right <> "*"
           _ ->
             raise Ecto.QueryError, reason: "where query unknown function #{fun}"
         end

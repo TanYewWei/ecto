@@ -46,20 +46,34 @@ defmodule Ecto.Adapters.Riak do
 
   def start_link(repo, url_opts) do   
     case PoolSup.start_link do
-      { :error, {:already_started, pid} } ->
-        { :error, {:already_started, pid} }
+      { :error, { :already_started, pid } } ->
+        { :error, { :already_started, pid } }
       { :ok, supervisor } ->
         ## Ensure that all pools are setup
-        pool_opts = pool_opts(repo, url_opts)    
-        Enum.each(pool_opts, fn(config)-> 
+        pool_opts = pool_opts(repo, url_opts)
+        if length(pool_opts) == 0 do
+          raise AdapterStartError,
+            message: "Must have at least one valid pooler config to start Riak Adapter"
+        end
+
+        Enum.map(pool_opts, fn(config)->
           case PoolSup.new_pool(config) do
             { :ok, pid } when is_pid(pid) ->
-              :ok
+              pid
             rsn ->
               raise AdapterStartError,
-              message: "pooler failed to start pool: #{inspect config}"
+                message: "pooler failed to start pool: #{inspect config}"
           end
         end)
+
+        ## Setup search indexes for all models
+        :timer.sleep(5)
+        failed_index_res = use_worker(repo, &Search.search_index_reload_all(&1))
+          |> Enum.filter(fn({ _, res })-> res != :ok end)
+        if length(failed_index_res) > 0 do
+          raise AdapterStartError,
+            message: "Failed to create search indexs for required models: #{inspect failed_index_res}"
+        end
         
         ## return supervisor pid
         { :ok, supervisor }
@@ -111,7 +125,7 @@ defmodule Ecto.Adapters.Riak do
     query = Util.normalize(query)
     { query_tuple, post_proc_fun } = Search.query(query)
     { _, _, querystring, _ } = query_tuple
-    IO.puts("riak all: #{inspect query_tuple}")
+    ##IO.puts("riak all: #{inspect query_tuple}")
     
     if String.strip(querystring) == "" do
       []
@@ -121,8 +135,8 @@ defmodule Ecto.Adapters.Riak do
           entities
           |> Ecto.Associations.Assoc.run(query)
           |> preload(repo, query)
-        rsn ->
-          rsn
+        _ ->
+          []
       end
     end
   end  
@@ -141,22 +155,11 @@ defmodule Ecto.Adapters.Riak do
   def create(repo, entity) do
     entity = RiakObj.create_primary_key(entity)
     object = RiakObj.entity_to_object(entity)
-    ##IO.puts(inspect object)
-    ##IO.puts("attempt put of object: #{elem(object, tuple_size(object)-1)} with content_type: #{object.get_content_type}")
-    fun = fn(socket)->
-              schema = RiakUtil.default_search_schema()
-              search_index = RiakUtil.model_search_index(entity.model)
-              ##:ok = Riak.create_search_index(socket, search_index, schema, [])
-              :ok = Riak.set_search_index(socket, object.bucket, search_index)
-              ##:timer.sleep(1000)
-              Riak.put(socket, object, @put_options)
-              ##Riak.get(socket, object.bucket, entity.primary_key)
-          end
+    fun = fn(socket)-> Riak.put(socket, object, @put_options) end
     
     case use_worker(repo, fun) do
       { :ok, new_object } ->
-        IO.puts("successfully created entity: #{new_object.get_value}, with content_type: #{new_object.get_content_type}")
-        ##IO.puts("successfully created entity: #{inspect(new_object.get_value |> Ecto.Adapters.Riak.JSON.decode)}")
+        ##IO.puts("successfully created entity: #{new_object.get_value}, with content_type: #{new_object.get_content_type}")
         RiakObj.object_to_entity(new_object)
       rsn ->
         nil
@@ -167,16 +170,14 @@ defmodule Ecto.Adapters.Riak do
   Updates an entity using the primary key as key,
   returning a new entity.
   """
-  @spec update(repo, entity) :: entity
+  @spec update(repo, entity) :: integer
   def update(repo, entity) do
     object = RiakObj.entity_to_object(entity)
-    fun = &Riak.put(&1, object, @put_options)
+    fun = &Riak.put(&1, object)
 
     case use_worker(repo, fun) do
-      { :ok, new_object } ->
-        RiakObj.object_to_entity(new_object)
-      _ ->
-        nil
+      :ok -> 1
+      _   -> 0
     end
   end
 
@@ -186,6 +187,20 @@ defmodule Ecto.Adapters.Riak do
   the number of affected entities.
   """
   def update_all(repo, query, values) do
+    entities = all(repo, query)
+    objects = Enum.map(entities, &RiakObj.entity_to_object(&1))
+    fun = fn(socket)->
+              Enum.map(objects, &Riak.put(socket, &1))
+          end
+
+    case use_worker(repo, fun) do
+      res when is_list(res) ->
+        Enum.reduce(res, 0, fn(x, acc)->
+          if(x == :ok, do: acc+1, else: acc)
+        end)
+      _ ->
+        0
+    end
   end
 
   @doc """

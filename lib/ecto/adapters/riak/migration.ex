@@ -197,13 +197,13 @@ defmodule Ecto.Adapters.Riak.Migration do
     ## Upgrade
     prefix = entity_prefix(entity.model)
     modules = :code.all_loaded
-      |> Enum.filter(fn({mod, _})->
+      |> Enum.filter(fn({ mod, _ })->
                          is_migration_module?(mod)
                          && prefix == entity_prefix(mod)
                          && mod.version <= target
                          && mod.version > current
                      end)
-      |> Enum.map(fn({mod, _})-> mod end)
+      |> Enum.map(fn({ mod, _ })-> mod end)
 
     ## Check for duplicates, raising error if any exist
     migration_modules_deduplicate!(modules, entity, target)
@@ -216,13 +216,13 @@ defmodule Ecto.Adapters.Riak.Migration do
     ## Downgrade
     prefix = entity_prefix(entity.model)
     modules = :code.all_loaded
-      |> Enum.filter(fn({mod, _})->
+      |> Enum.filter(fn({ mod, _ })->
                          is_migration_module?(mod)
                          && prefix == entity_prefix(mod)
                          && mod.version >= target
                          && mod.version < current
                      end)
-      |> Enum.map(fn({mod, _})-> mod end)
+      |> Enum.map(fn({ mod, _ })-> mod end)
 
     ## Check for duplicates, raising error if any exist
     migration_modules_deduplicate!(modules, entity, target)

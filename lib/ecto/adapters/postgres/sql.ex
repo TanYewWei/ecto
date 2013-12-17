@@ -46,7 +46,6 @@ defmodule Ecto.Adapters.Postgres.SQL do
     sources = create_names(query)
     { from, used_names } = from(query.from, sources)
 
-    IO.puts(query.select.expr)
     select   = select(query.select, sources)
     join     = join(query, sources, used_names)
     where    = where(query.wheres, sources)

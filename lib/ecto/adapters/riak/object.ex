@@ -72,6 +72,7 @@ defmodule Ecto.Adapters.Riak.Object do
     else
       :crypto.rand_bytes(18)
         |> :base64.encode
+        |> String.replace("/", "_")  ## '/' and '-' are disallowed in Solr
         |> entity.primary_key
     end
   end 
@@ -156,15 +157,30 @@ defmodule Ecto.Adapters.Riak.Object do
     |> model.new
   end
 
+  defp ecto_value(nil, _), do: nil
+  
   defp ecto_value(val, type) do
     case type do
       :binary ->
-        val = if is_binary(val), do: :base64.decode(val), else: nil
-        Ecto.Binary[value: val]
+        if is_binary(val) do
+          Ecto.Binary[value: :base64.decode(val)]
+        else
+          nil
+        end
       :datetime ->
         Datetime.parse_to_ecto_datetime(val)
       :interval ->
         Datetime.parse_to_ecto_interval(val)
+      :integer when is_binary(val) ->
+        case Integer.parse(val) do
+          {i, _} -> i
+          _      -> nil
+        end
+      :float when is_binary(val) ->
+        case Float.parse(val) do
+          {f, _} -> f
+          _      -> nil
+        end
       _ ->
         val
     end
