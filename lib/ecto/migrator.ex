@@ -20,9 +20,12 @@ defmodule Ecto.Migrator do
 
   """
 
+  @type strategy :: [all: true, to: non_neg_integer, step: non_neg_integer]
+
   @doc """
   Runs an up migration on the given repository.
   """
+  @spec up(Ecto.Repo.t, integer, Module.t) :: :ok | :already_up | no_return
   def up(repo, version, module) do
     commands = List.wrap(module.up)
     repo.adapter.migrate_up(repo, version, commands)
@@ -31,26 +34,82 @@ defmodule Ecto.Migrator do
   @doc """
   Runs a down migration on the given repository.
   """
+  @spec down(Ecto.Repo.t, integer, Module.t) :: :ok | :missing_up | no_return
   def down(repo, version, module) do
     commands = List.wrap(module.down)
     repo.adapter.migrate_down(repo, version, commands)
   end
 
   @doc """
-  Runs all migrations in the given directory.
+  Apply migrations in a directory to a repository with given strategy.
+
+  A strategy must be pass as an option. The available strategy types are:
+
+  * `:all`  runs all available if `true`
+  * `:step` runs the specific number of migrations
+  * `:to`   runs all until the supplied version is reached
+
   """
-  @spec run_up(Ecto.Repo.t, binary) :: [integer] | no_return
-  def run_up(repo, directory) do
-    migrations = Path.join(directory, "*")
-                 |> Path.wildcard
-                 |> Enum.filter(&Regex.match?(%r"\d+_.+\.exs$", &1))
-                 |> attach_versions
+  @spec run(Ecto.Repo.t, binary, atom, strategy) :: [integer]
+  def run(repo, directory, direction, opts) do
+    cond do
+      opts[:all] ->
+        run_all(repo, directory, direction)
+      to = opts[:to] ->
+        run_to(repo, directory, direction, to)
+      step = opts[:step] ->
+        run_step(repo, directory, direction, step)
+      true ->
+        raise ArgumentError, message: "expected one of :all, :to, or :step strategies"
+    end
+  end
 
-    ensure_no_duplication(migrations)
+  defp run_to(repo, directory, direction, target) do
+    within_target_version? = fn
+      { version, _ }, target, :up ->
+        version <= target
+      { version, _ }, target, :down ->
+        version >= target
+    end
 
-    migrations
-    |> filter_migrated(repo)
-    |> execute_migrations(repo)
+    pending_in_direction(repo, directory, direction)
+      |> Enum.take_while(&(within_target_version?.(&1, target, direction)))
+      |> migrate(direction, repo)
+  end
+
+  defp run_step(repo, directory, direction, count) do
+    pending_in_direction(repo, directory, direction)
+      |> Enum.take(count)
+      |> migrate(direction, repo)
+  end
+
+  defp run_all(repo, directory, direction) do
+    pending_in_direction(repo, directory, direction)
+      |> migrate(direction, repo)
+  end
+
+  defp pending_in_direction(repo, directory, :up) do
+    versions = repo.adapter.migrated_versions(repo)
+    migrations_for(directory) |>
+      Enum.filter(fn { version, _file } ->
+        not (version in versions)
+      end)
+  end
+
+  defp pending_in_direction(repo, directory, :down) do
+    versions = repo.adapter.migrated_versions(repo)
+    migrations_for(directory) |>
+      Enum.filter(fn { version, _file } ->
+        version in versions
+      end)
+      |> :lists.reverse
+  end
+
+  defp migrations_for(directory) do
+    Path.join(directory, "*")
+      |> Path.wildcard
+      |> Enum.filter(&Regex.match?(%r"\d+_.+\.exs$", &1))
+      |> attach_versions
   end
 
   defp attach_versions(files) do
@@ -58,6 +117,24 @@ defmodule Ecto.Migrator do
       { integer, _ } = Integer.parse(Path.basename(file))
       { integer, file }
     end)
+  end
+
+  defp migrate(migrations, direction, repo) do
+    ensure_no_duplication(migrations)
+    migrator = case direction do
+      :up -> &up/3
+      :down -> &down/3
+    end
+
+    Enum.map migrations, fn { version, file } ->
+      { mod, _bin } =
+        Enum.find(Code.load_file(file), fn { mod, _bin } ->
+          function_exported?(mod, :__migration__, 0)
+        end) || raise_no_migration_in_file(file)
+
+      migrator.(repo, version, mod)
+      version
+    end
   end
 
   defp ensure_no_duplication([{ version, _ } | t]) do
@@ -69,30 +146,6 @@ defmodule Ecto.Migrator do
   end
 
   defp ensure_no_duplication([]), do: :ok
-
-  defp filter_migrated(migrations, repo) do
-    versions = repo.adapter.migrated_versions(repo)
-    Enum.filter(migrations, fn { version, _file } ->
-      not (version in versions)
-    end)
-  end
-
-  defp execute_migrations(migrations, repo) do
-    Enum.map migrations, fn { version, file } ->
-      { mod, _bin } =
-        Enum.find(Code.load_file(file), fn { mod, _bin } ->
-          function_exported?(mod, :__migration__, 0)
-        end) || raise_no_migration_in_file(file)
-
-      commands = List.wrap(mod.up)
-      case repo.adapter.migrate_up(repo, version, commands) do
-        :already_up ->
-          version
-        :ok ->
-          version
-      end
-    end
-  end
 
   defp raise_no_migration_in_file(file) do
     raise Ecto.MigrationError, message: "file #{Path.relative_to_cwd(file)} does not contain any Ecto.Migration"
