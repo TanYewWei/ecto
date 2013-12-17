@@ -7,16 +7,16 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   alias Ecto.Adapters.Riak.Search
   alias Ecto.Adapters.Riak.Datetime
   alias Ecto.UnitTest.Post
-
+  
   defp test_query(query, expected) do
     { { _, _, querystring, _ }, _ } = Search.query(query |> normalize)
     assert expected == querystring
   end
 
   test "from" do
-    query = from(p in Post)
-    { {_,_,querystring,_}, _ } = Search.query(query)
-    assert "*:*" == query
+    query = from(p in Post) |> normalize
+    { { _ , _, querystring, _ }, _ } = Search.query(query)
+    assert "*:*" == querystring
   end
 
   test "where clause" do
@@ -50,7 +50,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
     datetime = Datetime.now_ecto_datetime()
     datetime_str = Datetime.solr_datetime(datetime)
     interval = Ecto.Interval.new(day: 1)
-    query = where(base, [p], p.posted >= date_add(now(), ^interval))
+    ##query = where(base, [p], p.posted >= date_add(now(), ^interval))
 
     interval_str = Datetime.solr_datetime_add(interval)
     where(base, [p], p.posted > date_add(^datetime, ^interval))
@@ -112,6 +112,15 @@ defmodule Ecto.Adapters.Riak.SearchTest do
     
   end
 
+  test "custom functions in select are ignored" do
+    base = from(p in Post)
+    post = mock_post
+
+    query = base |> select([p], custom(p.id)) |> normalize
+    { _, post_proc } = Search.query(query)
+    assert_raise Ecto.QueryError, fn()-> post_proc.([post]) end
+  end
+
   test "group_by with select" do
     base = from(p in Post)
     [p0, p1, p2, p3, p4] = posts = mock_posts()
@@ -160,7 +169,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
 
   test "group_by with having with select" do
     base = from(p in Post)
-    [p0, p1, p2, p3, p4] = posts = mock_posts()
+    [_, p1, p2, p3, p4] = posts = mock_posts()
     
     ## - avg aggregate function
     ## - having binary operators:
@@ -194,7 +203,6 @@ defmodule Ecto.Adapters.Riak.SearchTest do
     { _, post_proc } = group_by(base, [p], p.title)
       |> having([p], count(p.id) > 1)
       |> select([p], p.id) |> normalize |> Search.query
-    expected = [[p1.id, p2.id], [p3.id, p4.id]]
     [r0, r1] = post_proc.(posts)
     assert p1.id in r0 && p2.id in r0
     assert p3.id in r1 && p4.id in r1
@@ -265,13 +273,6 @@ defmodule Ecto.Adapters.Riak.SearchTest do
              rating: 5,
              posted: Datetime.now_ecto_datetime,
              temp: "test temp")
-  end
-
-  defp mock_comment() do
-    Comment.new(id: "comment_id_0",
-                bytes: <<1,2,3>>,
-                posted: Datetime.now_ecto_datetime,
-                post_id: "post_id_0")
   end
 
 end

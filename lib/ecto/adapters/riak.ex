@@ -67,7 +67,7 @@ defmodule Ecto.Adapters.Riak do
         end)
 
         ## Setup search indexes for all models
-        :timer.sleep(5)
+        :timer.sleep(500)
         failed_index_res = use_worker(repo, &Search.search_index_reload_all(&1))
           |> Enum.filter(fn({ _, res })-> res != :ok end)
         if length(failed_index_res) > 0 do
@@ -186,21 +186,30 @@ defmodule Ecto.Adapters.Riak do
   query will only have where expressions and a single from expression. Returns
   the number of affected entities.
   """
-  def update_all(repo, query, values) do
-    entities = all(repo, query)
-    objects = Enum.map(entities, &RiakObj.entity_to_object(&1))
-    fun = fn(socket)->
-              Enum.map(objects, &Riak.put(socket, &1))
-          end
+  def update_all(repo, Query[] = query, values) do
+    query = Util.normalize(query)
+    { query_tuple, post_proc_fun } = Search.query(query)
+    { _, _, querystring, _ } = query_tuple
 
-    case use_worker(repo, fun) do
-      res when is_list(res) ->
-        Enum.reduce(res, 0, fn(x, acc)->
-          if(x == :ok, do: acc+1, else: acc)
-        end)
-      _ ->
-        0
+    fun = fn(socket)->
+      case Search.execute(socket, query_tuple, post_proc_fun) do
+        entities when is_list(entities) ->
+          objects = Enum.map(entities, fn(entity)->
+            entity.update(values) |> RiakObj.entity_to_object
+          end)
+          
+          Enum.reduce(objects, 0, fn(object, acc)->
+            case Riak.put(socket, object) do
+              :ok -> acc + 1
+              _   -> acc
+            end
+          end)
+        _ ->
+          0
+      end
     end
+
+    use_worker(repo, fun)
   end
 
   @doc """
@@ -222,11 +231,11 @@ defmodule Ecto.Adapters.Riak do
   where expressions and a single from expression. Returns the number of affected
   entities.
   """
-  def delete_all(repo, query) do
+  def delete_all(repo, Query[] = query) do
     query = Util.normalize(query)
     { query_tuple, post_proc_fun } = Search.query(query)
     { _, _, querystring, _ } = query_tuple
-    
+
     fun = fn(socket)->
       case Search.execute(socket, query_tuple, post_proc_fun) do
         entities when is_list(entities) ->

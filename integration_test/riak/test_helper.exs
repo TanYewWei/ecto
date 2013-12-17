@@ -6,13 +6,6 @@ alias Ecto.Adapters.Riak.Util, as: RiakUtil
 alias Ecto.Integration.Riak.TestRepo
 alias :riakc_pb_socket, as: RiakSocket
 
-defmodule Ecto.Integration.Riak.CustomAPI do
-  use Ecto.Query.Typespec
-
-  deft integer
-  defs custom(integer) :: integer
-end
-
 defmodule Ecto.Integration.Riak.TestRepo do
   use Ecto.Repo, adapter: Ecto.Adapters.Riak
 
@@ -27,7 +20,7 @@ defmodule Ecto.Integration.Riak.TestRepo do
   end
 
   def query_apis do
-    [ Ecto.Integration.Riak.CustomAPI, Ecto.Query.API ]
+    [ Ecto.Query.API ]
   end
 end
 
@@ -84,8 +77,8 @@ defmodule Ecto.Integration.Riak.Custom do
   use Ecto.RiakModel
 
   queryable "customs", primary_key: false do
-    field :version,  :integer, default: 0
-    field :foo, :string, primary_key: true
+    field :version, :integer, default: 0
+    field :foo,     :string, primary_key: true
   end
 
   def version(), do: 0

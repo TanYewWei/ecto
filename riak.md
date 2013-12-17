@@ -110,6 +110,28 @@ Querying will be achieved via standard gets when possible and delegate the heavy
     Riak has no native notion of schema migrations. Instead, migrations are run lazily as data is read and updated.
     See the (Migrations Documentation)["/lib/ecto/adapters/riak/migrations.md"] for more details
 
+6. **Only uses Ecto.Query.API**
+
+    The Riak Adapter will ignore additional `query_api`s other than Ecto.Query.API
+
+7. **Limited Query API support**
+
+    Unsupported functions:
+    
+    * ilike
+
+8. **repo update_all/3 callback does not allow update expression**
+
+    ```elixir
+    ## Not permitted
+    SomeRepo.update_all(p in Post, count: p.count + 41)
+
+    ## Permitted
+    SomeRepo.update_all(from(p in Post), count: 3)
+    
+    ```
+
+
 ## TODO
 
 * We depend on a single ETS table to track migration information. Ideally, this should have one ETS table per repo

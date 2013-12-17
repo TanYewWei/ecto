@@ -52,7 +52,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
   @spec select_transform(tuple, entity)
     :: {transformed :: term, expr_acc :: tuple}
 
-  defp select_transform({:{}, _, list}, entity) do
+  defp select_transform({ :{}, _, list }, entity) do
     select_transform(list, entity)
     |> list_to_tuple
   end
@@ -155,8 +155,8 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
     entity
   end
 
-  defp select_transform({_, _, args}, entity) do
-    select_transform(args, entity)
+  defp select_transform({op, _, args}, entity) do
+    raise Ecto.QueryError, reason: "Riak select unknown op: #{op}/#{length(args)}"
   end
 
   defp select_transform(x, _) do
