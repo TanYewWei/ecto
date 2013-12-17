@@ -228,6 +228,7 @@ defmodule Ecto.Entity do
       @ecto_fields []
       @record_fields []
       @ecto_primary_key nil
+      @ecto_foreign_key_type opts[:foreign_key_type]
       Module.register_attribute(__MODULE__, :ecto_assocs, accumulate: true)
 
       @ecto_model opts[:model]
@@ -319,9 +320,16 @@ defmodule Ecto.Entity do
     opts = opts
            |> Keyword.put_new(:references, :id)
            |> Keyword.put_new(:foreign_key, :"#{name}_id")
-           |> Keyword.put_new(:type, :integer)
 
-    __field__(mod, opts[:foreign_key], opts[:type], [])
+    foreign_key_type =
+      if nil?(opts[:type]) do
+        global_type = Module.get_attribute(mod, :ecto_foreign_key_type)
+        if nil?(global), do: :integer, else: global_type
+      else
+        opts[:type]
+      end
+
+    __field__(mod, opts[:foreign_key], foreign_key_type, [])
 
     assoc = Ecto.Associations.BelongsTo.__assoc__(:new, name, mod)
     __field__(mod, :"__#{name}__", :virtual, default: assoc)

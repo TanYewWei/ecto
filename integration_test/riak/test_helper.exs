@@ -51,7 +51,7 @@ defmodule Ecto.Integration.Riak.Comment do
     field :interval, :interval
     field :bytes,    :binary
     field :version,  :integer, default: 0
-    belongs_to :post, Ecto.Integration.Riak.Post, type: :string
+    belongs_to :post, Ecto.Integration.Riak.Post ##, type: :string
   end
 
   def version(), do: 0
@@ -65,7 +65,7 @@ defmodule Ecto.Integration.Riak.Permalink do
   queryable "permalinks" do
     field :url, :string
     field :version,  :integer, default: 0
-    belongs_to :post, Ecto.Integration.Riak.Post, type: :string
+    belongs_to :post, Ecto.Integration.Riak.Post ##, type: :string
   end
 
   def version(), do: 0
