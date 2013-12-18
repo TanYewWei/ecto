@@ -102,18 +102,13 @@ defmodule Ecto.Repo.Backend do
 
   ## Helpers  
 
-<<<<<<< HEAD
-  defp parse_url(url) when is_binary(url) do
-    info = URI.parse(url)
+  defp parse_url(urls) when is_list(urls) do
+    Enum.map(urls, &parse_url/1)
+  end
 
-    unless info.scheme == "ecto" do
-      raise Ecto.InvalidURL, url: url, reason: "not an ecto url"
-=======
-  defp parse_url(url) do
-  
+  defp parse_url(url) do  
     unless url =~ %r/^[^:\/?#\s]+:\/\// do
       raise Ecto.InvalidURL, url: url, reason: "url should start with a scheme, host should start with //"
->>>>>>> d8999d42038b22fdcba5923f7fafd538f4540ec8
     end
 
     info = URI.parse(url)
@@ -138,11 +133,7 @@ defmodule Ecto.Repo.Backend do
     if info.port, do: opts = [port: info.port] ++ opts
 
     opts ++ query
-  end
-
-  defp parse_url(urls) when is_list(urls) do
-    Enum.map(urls, &parse_url/1)
-  end
+  end  
 
   defp atomize_keys(dict) do
     Enum.map dict, fn({ k, v }) -> { binary_to_atom(k), v } end

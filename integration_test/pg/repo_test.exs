@@ -252,6 +252,7 @@ defmodule Ecto.Integration.RepoTest do
     assert pl1.post.loaded? == false
 
     assert [pl3, pl1, pl2] = Preloader.run([pl3, pl1, pl2], TestRepo, :post)
+    IO.puts("belongs_to: #{inspect pl1.post.__assoc__(:loaded, )}")
     assert Post.Entity[id: ^pid1] = pl1.post.get
     assert nil = pl2.post.get
     assert Post.Entity[id: ^pid3] = pl3.post.get

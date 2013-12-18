@@ -12,8 +12,7 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
     assert p0.primary_key == nil
 
     p1 = Object.create_primary_key(p0)
-    <<"post_", rand_bytes :: binary>> = p1.primary_key
-    assert size(:base64.decode(rand_bytes)) == 18
+    assert size(p1.primary_key) == 24
 
     p0 = mock_post()
     p1 = Object.create_primary_key(p0)
@@ -25,7 +24,7 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
     object = Object.entity_to_object(entity)
     new_entity = Object.object_to_entity(object) ##.temp(entity.temp)
     new_entity = new_entity.temp("test temp")
-    assert new_entity == entity
+    assert new_entity == entity.id(new_entity.id)
   end
 
   test "(entity_to_object <-> object_to_entity) with siblings" do
@@ -41,7 +40,7 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
     e2 = e1.rating(6)
     
     ## Set timestamps
-    ts_key = "_ts_i"
+    ts_key = "ectots_l"
     j0 = Object.entity_to_object(e0) |> object_updatedvalue |> JSON.decode
     j1 = Object.entity_to_object(e1) |> object_updatedvalue |> JSON.decode
     j2 = Object.entity_to_object(e2) |> object_updatedvalue |> JSON.decode

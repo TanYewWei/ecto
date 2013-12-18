@@ -189,6 +189,7 @@ defmodule Ecto.Entity do
                        `:"#{other_entity}_id"`;
     * `:references`  - Sets the key on the other entity to be used for the
                        association, defaults to: `:id`;
+    * `:type`        - Sets the type of `:foreign_key`. Defaults to: `:integer`;
 
   ## Examples
 
@@ -230,6 +231,8 @@ defmodule Ecto.Entity do
       @ecto_primary_key nil
       @ecto_foreign_key_type opts[:foreign_key_type]
       Module.register_attribute(__MODULE__, :ecto_assocs, accumulate: true)
+
+      @ecto_foreign_key_type opts[:foreign_key_type]
 
       @ecto_model opts[:model]
       field(:model, :virtual, default: opts[:model])
@@ -324,7 +327,7 @@ defmodule Ecto.Entity do
     foreign_key_type =
       if nil?(opts[:type]) do
         global_type = Module.get_attribute(mod, :ecto_foreign_key_type)
-        if nil?(global), do: :integer, else: global_type
+        if nil?(global_type), do: :integer, else: global_type
       else
         opts[:type]
       end

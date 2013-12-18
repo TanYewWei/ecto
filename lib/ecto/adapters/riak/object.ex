@@ -82,11 +82,11 @@ defmodule Ecto.Adapters.Riak.Object do
     resolve_json(value) |> statebox_to_entity
   end
 
-  @spec resolve_siblings(binary) :: entity
+  @spec resolve_siblings([binary | json]) :: entity
   def resolve_siblings(values) do
-    ##IO.puts("resolve siblings: #{inspect values}")
     stateboxes = Enum.map(values, &resolve_json/1)
     statebox = :statebox_orddict.from_values(stateboxes)
+    statebox = :statebox.truncate(0, statebox)
     statebox_to_entity(statebox)
   end
 
@@ -141,18 +141,17 @@ defmodule Ecto.Adapters.Riak.Object do
     ## Use module to get available fields 
     ## and create new entity
     entity_fields = entity_module.__entity__(:field_names)
-    Enum.map(entity_fields,
-             fn(x)->
-                 case :orddict.find(x, values) do
-                   { :ok, value } ->
-                     type = entity_module.__entity__(:field_type, x)
-                     { x, ecto_value(value, type) }
-                   _ ->
-                     nil
-                 end
-             end)
-    |> Enum.filter(&(nil != &1))
-    |> model.new
+    Enum.map(entity_fields, fn(x)->
+      case :orddict.find(x, values) do
+        { :ok, value } ->
+          type = entity_module.__entity__(:field_type, x)
+          { x, ecto_value(value, type) }
+        _ ->
+          nil
+      end
+    end)
+      |> Enum.filter(&(nil != &1))
+      |> model.new
   end
 
   defp ecto_value(nil, _), do: nil

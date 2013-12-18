@@ -20,9 +20,8 @@ defmodule Ecto.Integration.Riak.RepoTest do
   end
 
   test "custom functions are ignored" do
-    IO.puts("custom functions")
     assert Post.Entity[id: id1] = TestRepo.create(Post.Entity[title: "hi"])
-    wait_assert [id1*10] == TestRepo.all(from p in Post, select: custom(p.id))
+    assert_raise Ecto.QueryError, fn()-> TestRepo.all(from p in Post, select: custom(p.id)) end
   end
 
   test "already started" do
@@ -159,12 +158,12 @@ defmodule Ecto.Integration.Riak.RepoTest do
   test "delete some entites" do
     assert Post.Entity[id: id1] = TestRepo.create(Post.Entity[title: "1", text: "hai"])
     assert Post.Entity[id: id2] = TestRepo.create(Post.Entity[title: "2", text: "hai"])
-    assert Post.Entity[id: id3] = TestRepo.create(Post.Entity[title: "3", text: "hai"])
+    assert Post.Entity[id: id3] = p3 = TestRepo.create(Post.Entity[title: "3", text: "hai"])
 
     query = from(p in Post, where: p.id == ^id1 or p.id == ^id2)
     wait_assert 2 = TestRepo.delete_all(query)
     query = query |> where([p], p.id == ^id3)
-    wait_assert [Post.Entity[id: id3]] = TestRepo.all(query)
+    wait_assert [p3] = TestRepo.all(query)
   end
 
   test "delete all entites" do
@@ -203,20 +202,25 @@ defmodule Ecto.Integration.Riak.RepoTest do
     p2 = TestRepo.create(Post.Entity[title: "2"])
     p3 = TestRepo.create(Post.Entity[title: "3"])
 
-    Comment.Entity[id: cid1] = TestRepo.create(Comment.Entity[text: "1", post_id: p1.id])
-    Comment.Entity[id: cid2] = TestRepo.create(Comment.Entity[text: "2", post_id: p1.id])
-    Comment.Entity[id: cid3] = TestRepo.create(Comment.Entity[text: "3", post_id: p2.id])
-    Comment.Entity[id: cid4] = TestRepo.create(Comment.Entity[text: "4", post_id: p2.id])
+    c1 = Comment.Entity[] = TestRepo.create(Comment.Entity[text: "1", post_id: p1.id])
+    c2 = Comment.Entity[] = TestRepo.create(Comment.Entity[text: "2", post_id: p1.id])
+    c3 = Comment.Entity[] = TestRepo.create(Comment.Entity[text: "3", post_id: p2.id])
+    c4 = Comment.Entity[] = TestRepo.create(Comment.Entity[text: "4", post_id: p2.id])
 
     assert_raise Ecto.AssociationNotLoadedError, fn ->
       p1.comments.to_list
     end
     assert p1.comments.loaded? == false
 
-    wait_assert [p3, p1, p2] = Preloader.run([p3, p1, p2], TestRepo, :comments)
-    wait_assert [Comment.Entity[id: ^cid1], Comment.Entity[id: ^cid2]] = p1.comments.to_list
-    wait_assert [Comment.Entity[id: ^cid3], Comment.Entity[id: ^cid4]] = p2.comments.to_list
-    wait_assert [] = p3.comments.to_list
+    wait_for_index
+    [p3, p1, p2] = wait_for_preload([p3, p1, p2], TestRepo, :comments, :has_many)
+    p1_comments = p1.comments.to_list
+    p2_comments = p2.comments.to_list
+    assert c1 in p1_comments
+    assert c2 in p1_comments
+    assert c3 in p2_comments
+    assert c4 in p2_comments
+    assert [] = p3.comments.to_list
     assert p1.comments.loaded? == true
   end
 
@@ -237,9 +241,8 @@ defmodule Ecto.Integration.Riak.RepoTest do
     end
     assert p1.permalink.loaded? == false
 
-    wait_assert [p3, p1, p2] = Preloader.run([p3, p1, p2], TestRepo, :permalink)
-    IO.puts("preload has_one #{inspect p1}")
-    ##IO.puts("preload has_one #{inspect p1.permalink.get}")
+    wait_for_index
+    [p3, p1, p2] = wait_for_preload([p3, p1, p2], TestRepo, :permalink, :has_one)
     wait_assert Permalink.Entity[id: ^pid1] = p1.permalink.get
     wait_assert nil = p2.permalink.get
     wait_assert Permalink.Entity[id: ^pid3] = p3.permalink.get
@@ -259,9 +262,9 @@ defmodule Ecto.Integration.Riak.RepoTest do
       pl1.post.get
     end
     assert pl1.post.loaded? == false
-
-    wait_for_index()
-    wait_assert [pl3, pl1, pl2] = Preloader.run([pl3, pl1, pl2], TestRepo, :post)
+    
+    wait_for_index
+    [pl3, pl1, pl2] = wait_for_preload([pl3, pl1, pl2], TestRepo, :post, :belongs_to)
     wait_assert Post.Entity[id: ^pid1] = pl1.post.get
     wait_assert nil = pl2.post.get
     wait_assert Post.Entity[id: ^pid3] = pl3.post.get
@@ -354,24 +357,23 @@ defmodule Ecto.Integration.Riak.RepoTest do
   #   assert [] = p3.comments.to_list
   # end
 
-  # test "row transform" do
-  #   post = TestRepo.create(Post.Entity[title: "1", text: "hi"])
-  #   query = from(p in Post, select: { p.title, [ p, { p.text } ] })
+  test "row transform" do
+    post = TestRepo.create(Post.Entity[title: "1", text: "hi"])
+    query = from(p in Post, select: { p.title, [ p, { p.text } ] })
     
-  #   wait_until
-  #   assert [{ "1", [ ^post, { "hi" } ] }] = TestRepo.all(query)
-  # end
-
-  defp wait_for_index() do
-    :timer.sleep(1100)
+    wait_assert [{ "1", [ ^post, { "hi" } ] }] = TestRepo.all(query)
   end
 
+  defp wait_for_index() do
+    :timer.sleep(2000)
+  end
+  
   @type wait_until_fun :: (() -> ExUnit.ExpectationError.t | any)
   @type msec :: non_neg_integer
   @spec wait_until(wait_until_fun, msec, msec) :: any
 
   defp wait_until(fun) do
-    wait_until(fun, 5, 700)
+    wait_until(fun, 7, 700)
   end
 
   defp wait_until(fun, retry, delay) when retry > 0 do
@@ -388,8 +390,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
         wait_until(fun, retry-1, delay)
       end
     else
-      ##IO.puts("wait_until succeeded: #{inspect fun}, #{retry}, #{inspect res}")
-      :ok
+      res
     end
   end
 
