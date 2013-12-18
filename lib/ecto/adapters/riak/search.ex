@@ -159,10 +159,6 @@ defmodule Ecto.Adapters.Riak.Search do
   @spec execute(pid, query_tuple, post_proc_fun) :: [entity]
   def execute(worker, query_tuple, post_proc_fun) do
     { search_index, bucket, querystring, opts } = query_tuple
-    # IO.puts("search worker: #{worker}")
-    # IO.puts("search index: #{search_index}")
-    # IO.puts("search qs: #{querystring}")
-    # IO.puts("search opts: #{inspect opts}")
     case RiakSocket.search(worker, search_index, querystring, opts) do      
       ## -----------------
       ## Got Search Result
@@ -431,7 +427,7 @@ defmodule Ecto.Adapters.Riak.Search do
 
   defp riak_models() do
     ## returns all models 
-    modules = :code.all_loaded
+    :code.all_loaded
       |> Enum.filter(fn({ mod, _ })->
                          function_exported?(mod, :__model__, 1)
                      end)

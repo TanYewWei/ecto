@@ -3,24 +3,19 @@ defmodule Ecto.Adapters.Riak do
   """
 
   @behaviour Ecto.Adapter
-  @behaviour Ecto.Adapter.Migrations
 
   @bucket_name  "50"
   @bucket_type  "map"
   @datatype_update_options [:create, :return_body]
   @put_options [:return_body]
-
-  alias Ecto.Query.Query
-  alias Ecto.Query.QueryExpr
-  alias Ecto.Query.Util
-  ##alias Ecto.Query.Normalizer
-  
+    
   alias Ecto.Adapters.Riak.AdapterStartError
-  alias Ecto.Adapters.Riak.Connection
   alias Ecto.Adapters.Riak.Object, as: RiakObj
   alias Ecto.Adapters.Riak.Search
-  alias Ecto.Adapters.Riak.Supervisor  
+  alias Ecto.Adapters.Riak.Supervisor
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
+  alias Ecto.Query.Query
+  alias Ecto.Query.Util
 
   alias :pooler, as: Pool
   alias :pooler_sup, as: PoolSup
@@ -60,7 +55,7 @@ defmodule Ecto.Adapters.Riak do
           case PoolSup.new_pool(config) do
             { :ok, pid } when is_pid(pid) ->
               pid
-            rsn ->
+            _ ->
               raise AdapterStartError,
                 message: "pooler failed to start pool: #{inspect config}"
           end
@@ -159,9 +154,8 @@ defmodule Ecto.Adapters.Riak do
     
     case use_worker(repo, fun) do
       { :ok, new_object } ->
-        ##IO.puts("successfully created entity: #{new_object.get_value}, with content_type: #{new_object.get_content_type}")
         RiakObj.object_to_entity(new_object)
-      rsn ->
+      _ ->
         nil
     end
   end  
@@ -189,7 +183,6 @@ defmodule Ecto.Adapters.Riak do
   def update_all(repo, Query[] = query, values) do
     query = Util.normalize(query)
     { query_tuple, post_proc_fun } = Search.query(query)
-    { _, _, querystring, _ } = query_tuple
 
     fun = fn(socket)->
       case Search.execute(socket, query_tuple, post_proc_fun) do
@@ -234,7 +227,6 @@ defmodule Ecto.Adapters.Riak do
   def delete_all(repo, Query[] = query) do
     query = Util.normalize(query)
     { query_tuple, post_proc_fun } = Search.query(query)
-    { _, _, querystring, _ } = query_tuple
 
     fun = fn(socket)->
       case Search.execute(socket, query_tuple, post_proc_fun) do
@@ -274,40 +266,5 @@ defmodule Ecto.Adapters.Riak do
         { :error, rsn }
     end
   end
-
-  ## ----------------------------------------------------------------------
-  ## Migration API
-  ## ----------------------------------------------------------------------
-
-  @doc """
-  Runs an up migration on the given repo, the migration is identified by the
-  supplied version.
-
-  ## Examples
-
-    MyRepo.migrate_up(Repo, 20080906120000, "CREATE TABLE users(id serial, name text)")
-
-  """
-  def migrate_up(repo, version, commands) do
-  end
-
-  @doc """
-  Runs a down migration on the given repo, the migration is identified by the
-  supplied version.
-
-  ## Examples
-
-    MyRepo.migrate_down(Repo, 20080906120000, "DROP TABLE users")
-
-  """
-  def migrate_down(repo, version, commands) do
-  end
-
-  @doc """
-  Returns the versions of all migrations that have been run on the given repo.
-  """
-  def migrated_versions(repo) do
-  end
-  
   
 end

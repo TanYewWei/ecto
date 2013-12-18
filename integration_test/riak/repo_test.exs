@@ -15,12 +15,11 @@ defmodule Ecto.Integration.Riak.RepoTest do
   ## ============================================================
 
   teardown_all do
-    ##delete_all_test_data
+    delete_all_test_data
     { :ok, [] }
   end
 
   test "custom functions are ignored" do
-    assert Post.Entity[id: id1] = TestRepo.create(Post.Entity[title: "hi"])
     assert_raise Ecto.QueryError, fn()-> TestRepo.all(from p in Post, select: custom(p.id)) end
   end
 
@@ -163,7 +162,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     query = from(p in Post, where: p.id == ^id1 or p.id == ^id2)
     wait_assert 2 = TestRepo.delete_all(query)
     query = query |> where([p], p.id == ^id3)
-    wait_assert [p3] = TestRepo.all(query)
+    wait_assert [p3] == TestRepo.all(query)
   end
 
   test "delete all entites" do
@@ -172,6 +171,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     assert Post.Entity[id: id3] = TestRepo.create(Post.Entity[title: "3", text: "hai"])
     
     query = from(p in Post, where: p.id == ^id1 or p.id == ^id2 or p.id == ^id3)
+    IO.puts("delete all query: #{inspect Ecto.Adapters.Riak.Search.query(query |> Ecto.Query.Util.normalize)}")
     wait_assert 3 = TestRepo.delete_all(query)
     wait_assert [] = TestRepo.all(query)
   end
@@ -194,7 +194,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
   end
 
   test "preload empty" do
-    wait_assert [] == Preloader.run([], TestRepo, :anything_goes)
+    assert [] == Preloader.run([], TestRepo, :anything_goes)
   end
 
   test "preload has_many" do
@@ -212,8 +212,14 @@ defmodule Ecto.Integration.Riak.RepoTest do
     end
     assert p1.comments.loaded? == false
 
-    wait_for_index
-    [p3, p1, p2] = wait_for_preload([p3, p1, p2], TestRepo, :comments, :has_many)
+    ##wait_for_index
+    query = from(p in Post,
+                 where: p.id in [^p1.id, ^p2.id, ^p3.id],
+                 order_by: p.title,
+                 preload: :comments)
+    [p1, p2, p3] =
+      wait_assert [Post.Entity[], Post.Entity[], Post.Entity[]] =
+      TestRepo.all(query)
     p1_comments = p1.comments.to_list
     p2_comments = p2.comments.to_list
     assert c1 in p1_comments
@@ -241,8 +247,13 @@ defmodule Ecto.Integration.Riak.RepoTest do
     end
     assert p1.permalink.loaded? == false
 
-    wait_for_index
-    [p3, p1, p2] = wait_for_preload([p3, p1, p2], TestRepo, :permalink, :has_one)
+    query = from(p in Post,
+                 where: p.id in [^p1.id, ^p2.id, ^p3.id],
+                 order_by: p.title,
+                 preload: :permalink)
+    [p1, p2, p3] =
+      wait_assert [Post.Entity[], Post.Entity[], Post.Entity[]] =
+      TestRepo.all(query)
     wait_assert Permalink.Entity[id: ^pid1] = p1.permalink.get
     wait_assert nil = p2.permalink.get
     wait_assert Permalink.Entity[id: ^pid3] = p3.permalink.get
@@ -254,118 +265,139 @@ defmodule Ecto.Integration.Riak.RepoTest do
     TestRepo.create(Post.Entity[title: "2"])
     Post.Entity[id: pid3] = TestRepo.create(Post.Entity[title: "3"])
 
-    pl1 = TestRepo.create(Permalink.Entity[url: "1", post_id: pid1])
-    pl2 = TestRepo.create(Permalink.Entity[url: "2", post_id: nil])
-    pl3 = TestRepo.create(Permalink.Entity[url: "3", post_id: pid3])
+    pl1 = TestRepo.create(Permalink.Entity[url: "3", post_id: pid1])
+    pl2 = TestRepo.create(Permalink.Entity[url: "1", post_id: nil])
+    pl3 = TestRepo.create(Permalink.Entity[url: "2", post_id: pid3])
 
     assert_raise Ecto.AssociationNotLoadedError, fn ->
       pl1.post.get
     end
     assert pl1.post.loaded? == false
     
-    wait_for_index
-    [pl3, pl1, pl2] = wait_for_preload([pl3, pl1, pl2], TestRepo, :post, :belongs_to)
+    query = from(l in Permalink,
+                 where: l.id in [^pl1.id, ^pl2.id, ^pl3.id],
+                 order_by: l.url,
+                 preload: :post)
+    [pl2, pl3, pl1] = 
+      wait_assert [Permalink.Entity[], Permalink.Entity[], Permalink.Entity[]] = 
+      TestRepo.all(query)
     wait_assert Post.Entity[id: ^pid1] = pl1.post.get
     wait_assert nil = pl2.post.get
     wait_assert Post.Entity[id: ^pid3] = pl3.post.get
     assert pl1.post.loaded? == true
   end
 
-  # test "preload belongs_to with shared assocs 1" do
-  #   Post.Entity[id: pid1] = TestRepo.create(Post.Entity[title: "1"])
-  #   Post.Entity[id: pid2] = TestRepo.create(Post.Entity[title: "2"])
+  test "preload belongs_to with shared assocs 1" do
+    Post.Entity[id: pid1] = TestRepo.create(Post.Entity[title: "1"])
+    Post.Entity[id: pid2] = TestRepo.create(Post.Entity[title: "2"])
 
-  #   c1 = TestRepo.create(Comment.Entity[text: "1", post_id: pid1])
-  #   c2 = TestRepo.create(Comment.Entity[text: "2", post_id: pid1])
-  #   c3 = TestRepo.create(Comment.Entity[text: "3", post_id: pid2])
+    c1 = TestRepo.create(Comment.Entity[text: "1", post_id: pid1])
+    c2 = TestRepo.create(Comment.Entity[text: "2", post_id: pid1])
+    c3 = TestRepo.create(Comment.Entity[text: "3", post_id: pid2])
 
-  #   assert [c3, c1, c2] = Preloader.run([c3, c1, c2], TestRepo, :post)
-  #   assert Post.Entity[id: ^pid1] = c1.post.get
-  #   assert Post.Entity[id: ^pid1] = c2.post.get
-  #   assert Post.Entity[id: ^pid2] = c3.post.get
-  # end
+    query = from(c in Comment,
+                 where: c.id in [^c1.id, ^c2.id, ^c3.id],
+                 order_by: [desc: c.text],
+                 preload: [:post])
+    [c3, c2, c1] =
+      wait_assert [Comment.Entity[], Comment.Entity[], Comment.Entity[]] = 
+      TestRepo.all(query)
+    assert Post.Entity[id: ^pid1] = c1.post.get
+    assert Post.Entity[id: ^pid1] = c2.post.get
+    assert Post.Entity[id: ^pid2] = c3.post.get
+  end
 
-  # test "preload belongs_to with shared assocs 2" do
-  #   Post.Entity[id: pid1] = TestRepo.create(Post.Entity[title: "1"])
-  #   Post.Entity[id: pid2] = TestRepo.create(Post.Entity[title: "2"])
+  test "preload belongs_to with shared assocs 2" do
+    Post.Entity[id: pid1] = TestRepo.create(Post.Entity[title: "1"])
+    Post.Entity[id: pid2] = TestRepo.create(Post.Entity[title: "2"])
 
-  #   c1 = TestRepo.create(Comment.Entity[text: "1", post_id: pid1])
-  #   c2 = TestRepo.create(Comment.Entity[text: "2", post_id: pid2])
-  #   c3 = TestRepo.create(Comment.Entity[text: "3", post_id: nil])
+    c1 = TestRepo.create(Comment.Entity[text: "1", post_id: pid1])
+    c2 = TestRepo.create(Comment.Entity[text: "3", post_id: pid2])
+    c3 = TestRepo.create(Comment.Entity[text: "2", post_id: nil])
 
-  #   assert [c3, c1, c2] = Preloader.run([c3, c1, c2], TestRepo, :post)
-  #   assert Post.Entity[id: ^pid1] = c1.post.get
-  #   assert Post.Entity[id: ^pid2] = c2.post.get
-  #   assert nil = c3.post.get
-  # end
+    ##wait_for_index
+    query = from(c in Comment,
+                 where: c.id in [^c1.id, ^c2.id, ^c3.id],
+                 preload: [:post],
+                 order_by: c.text)
+    [c1, c3, c2] = wait_assert [Comment.Entity[], Comment.Entity[], Comment.Entity[]] = TestRepo.all(query)
+    assert Post.Entity[id: ^pid1] = c1.post.get
+    assert Post.Entity[id: ^pid2] = c2.post.get
+    assert nil = c3.post.get
+  end
 
-  # test "preload nils" do
-  #   p1 = TestRepo.create(Post.Entity[title: "1"])
-  #   p2 = TestRepo.create(Post.Entity[title: "2"])
+  test "preload nested" do
+    p1 = TestRepo.create(Post.Entity[title: "1"])
+    p2 = TestRepo.create(Post.Entity[title: "2"])
 
-  #   assert [Post.Entity[], nil, Post.Entity[]] =
-  #          Preloader.run([p1, nil, p2], TestRepo, :permalink)
+    c1 = TestRepo.create(Comment.Entity[text: "1", post_id: p1.id])
+    c2 = TestRepo.create(Comment.Entity[text: "2", post_id: p1.id])
+    c3 = TestRepo.create(Comment.Entity[text: "3", post_id: p2.id])
+    c4 = TestRepo.create(Comment.Entity[text: "4", post_id: p2.id])
+    
+    query = from(p in Post,
+                 where: p.id in [^p1.id, ^p2.id],
+                 order_by: [asc: p.title],
+                 preload: [comments: :post])
+    [p1, p2] =
+      wait_assert [Post.Entity[], Post.Entity[]] =
+      TestRepo.all(query)
+    assert [c1, c2] = p1.comments.to_list
+    assert [c3, c4] = p2.comments.to_list
+    assert p1.id == c1.post.get.id
+    assert p1.id == c2.post.get.id
+    assert p2.id == c3.post.get.id
+    assert p2.id == c4.post.get.id
+  end
 
-  #   c1 = TestRepo.create(Comment.Entity[text: "1", post_id: p1.id])
-  #   c2 = TestRepo.create(Comment.Entity[text: "2", post_id: p2.id])
+  test "preload keyword query" do
+    p1 = TestRepo.create(Post.Entity[title: "1"])
+    p2 = TestRepo.create(Post.Entity[title: "2"])
+    p3 = TestRepo.create(Post.Entity[title: "3"])
 
-  #   assert [Comment.Entity[], nil, Comment.Entity[]] =
-  #          Preloader.run([c1, nil, c2], TestRepo, :post)
-  # end
+    c1 = Comment.Entity[] = TestRepo.create(Comment.Entity[text: "1", post_id: p1.id])
+    c2 = Comment.Entity[] = TestRepo.create(Comment.Entity[text: "2", post_id: p1.id])
+    c3 = Comment.Entity[] = TestRepo.create(Comment.Entity[text: "3", post_id: p2.id])
+    c4 = Comment.Entity[] = TestRepo.create(Comment.Entity[text: "4", post_id: p2.id])
 
-  # test "preload nested" do
-  #   p1 = TestRepo.create(Post.Entity[title: "1"])
-  #   p2 = TestRepo.create(Post.Entity[title: "2"])
+    query = from(p in Post, 
+                 where: p.id in [^p1.id, ^p2.id, ^p3.id],
+                 preload: [:comments],
+                 order_by: p.title,
+                 select: p)
 
-  #   TestRepo.create(Comment.Entity[text: "1", post_id: p1.id])
-  #   TestRepo.create(Comment.Entity[text: "2", post_id: p1.id])
-  #   TestRepo.create(Comment.Entity[text: "3", post_id: p2.id])
-  #   TestRepo.create(Comment.Entity[text: "4", post_id: p2.id])
+    [p1, p2, p3] =
+      wait_assert [Post.Entity[], Post.Entity[], Post.Entity[]] =
+      TestRepo.all(query)
+    p1_comments = p1.comments.to_list
+    p2_comments = p2.comments.to_list
+    assert c1 in p1_comments
+    assert c2 in p1_comments
+    assert c3 in p2_comments
+    assert c4 in p2_comments
+    assert [] = p3.comments.to_list
 
-  #   assert [p2, p1] = Preloader.run([p2, p1], TestRepo, [comments: :post])
-  #   assert [c1, c2] = p1.comments.to_list
-  #   assert [c3, c4] = p2.comments.to_list
-  #   assert p1.id == c1.post.get.id
-  #   assert p1.id == c2.post.get.id
-  #   assert p2.id == c3.post.get.id
-  #   assert p2.id == c4.post.get.id
-  # end
+    query = from(p in Post,
+                 where: p.id in [^p1.id, ^p2.id, ^p3.id],
+                 preload: [:comments],
+                 order_by: p.title,
+                 select: { 0, [p] })
+    posts = TestRepo.all(query)
+    [p1, p2, p3] = Enum.map(posts, fn { 0, [p] } -> p end)
 
-  # test "preload keyword query" do
-  #   p1 = TestRepo.create(Post.Entity[title: "1"])
-  #   p2 = TestRepo.create(Post.Entity[title: "2"])
-  #   TestRepo.create(Post.Entity[title: "3"])
-
-  #   Comment.Entity[id: cid1] = TestRepo.create(Comment.Entity[text: "1", post_id: p1.id])
-  #   Comment.Entity[id: cid2] = TestRepo.create(Comment.Entity[text: "2", post_id: p1.id])
-  #   Comment.Entity[id: cid3] = TestRepo.create(Comment.Entity[text: "3", post_id: p2.id])
-  #   Comment.Entity[id: cid4] = TestRepo.create(Comment.Entity[text: "4", post_id: p2.id])
-
-  #   query = from(p in Post, preload: [:comments], select: p)
-
-  #   assert [p1, p2, p3] = TestRepo.all(query)
-  #   assert [Comment.Entity[id: ^cid1], Comment.Entity[id: ^cid2]] = p1.comments.to_list
-  #   assert [Comment.Entity[id: ^cid3], Comment.Entity[id: ^cid4]] = p2.comments.to_list
-  #   assert [] = p3.comments.to_list
-
-  #   query = from(p in Post, preload: [:comments], select: { 0, [p] })
-  #   posts = TestRepo.all(query)
-  #   [p1, p2, p3] = Enum.map(posts, fn { 0, [p] } -> p end)
-
-  #   assert [Comment.Entity[id: ^cid1], Comment.Entity[id: ^cid2]] = p1.comments.to_list
-  #   assert [Comment.Entity[id: ^cid3], Comment.Entity[id: ^cid4]] = p2.comments.to_list
-  #   assert [] = p3.comments.to_list
-  # end
+    p1_comments = p1.comments.to_list
+    p2_comments = p2.comments.to_list
+    assert c1 in p1_comments
+    assert c2 in p1_comments
+    assert c3 in p2_comments
+    assert c4 in p2_comments
+    assert [] = p3.comments.to_list
+  end
 
   test "row transform" do
     post = TestRepo.create(Post.Entity[title: "1", text: "hi"])
-    query = from(p in Post, select: { p.title, [ p, { p.text } ] })
-    
+    query = from(p in Post, select: { p.title, [ p, { p.text } ] })    
     wait_assert [{ "1", [ ^post, { "hi" } ] }] = TestRepo.all(query)
-  end
-
-  defp wait_for_index() do
-    :timer.sleep(2000)
   end
   
   @type wait_until_fun :: (() -> ExUnit.ExpectationError.t | any)
@@ -373,7 +405,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
   @spec wait_until(wait_until_fun, msec, msec) :: any
 
   defp wait_until(fun) do
-    wait_until(fun, 7, 700)
+    wait_until(fun, 10, 800)
   end
 
   defp wait_until(fun, retry, delay) when retry > 0 do

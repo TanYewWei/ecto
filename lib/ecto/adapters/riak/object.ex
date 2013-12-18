@@ -72,7 +72,8 @@ defmodule Ecto.Adapters.Riak.Object do
     else
       :crypto.rand_bytes(18)
         |> :base64.encode
-        |> String.replace("/", "_")  ## '/' and '-' are disallowed in Solr
+        |> String.replace("/", "_")  ## '/', '+', and '-' are disallowed in Solr
+        |> String.replace("+", ".")
         |> entity.primary_key
     end
   end 
