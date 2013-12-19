@@ -29,84 +29,11 @@ defmodule Ecto.Adapters.Riak.Util do
   """
   def default_search_schema(), do: "_yz_default"
 
-  def default_bucket_type(), do: "ecto_riak"
+  def default_bucket_type(), do: "ecto_riak"  
 
   ## ----------------------------------------------------------------------
-  ## Key and Value De/Serialization
+  ## Misc Helpers
   ## ----------------------------------------------------------------------
-
-  @yz_key_regex  %r"_(i|is|f|fs|b|bs|b64_s|b64_ss|s|ss|i_dt|i_dts|dt|dts)$"
-
-  @doc """
-  Removes the default YZ schema suffix from a key.
-  schema ref: https://github.com/basho/yokozuna/blob/develop/priv/default_schema.xml
-  """
-  @spec key_from_yz(binary) :: binary
-  def key_from_yz(key) do
-    Regex.replace(@yz_key_regex, to_string(key), "")
-  end
-
-  @doc """
-  Adds a YZ schema suffix to a key depending on its type.
-  """
-  @spec yz_key(binary, atom | { :list, atom }) :: binary
-  def yz_key(key, type) do
-    to_string(key) <> "_" <>
-      case type do
-        :integer  -> "i"
-        :float    -> "f"
-        :binary   -> "b64_s"
-        :string   -> "s"
-        :boolean  -> "b"
-        :datetime -> "dt"
-        :interval -> "i_dt"
-        { :list, list_type } ->
-          case list_type do
-            :integer  -> "is"
-            :float    -> "fs"
-            :binary   -> "b64_ss"
-            :string   -> "ss"
-            :boolean  -> "bs"
-            :datetime -> "dts"
-            :interval -> "i_dts"
-          end
-      end
-  end
-
-  def yz_key_atom(key, type) do
-    yz_key(key, type) |> to_atom
-  end
-
-  @spec yz_key_type(binary) :: atom | {:list, atom}
-  def yz_key_type(key) do
-    [suffix] = Regex.run(@yz_key_regex, key)
-      |> Enum.filter(&String.starts_with?(&1, "_"))
-    case suffix do
-      "i"      -> :integer
-      "f"      -> :float
-      "b64_s"  -> :binary
-      "s"      -> :string
-      "b"      -> :boolean
-      "dt"     -> :datetime
-      "i_dt"   -> :interval
-      "is"     -> { :list, :integer }
-      "fs"     -> { :list, :float }
-      "b64_ss" -> { :list, :binary }
-      "ss"     -> { :list, :string }
-      "bs"     -> { :list, :boolean }
-      "dts"    -> { :list, :datetime }
-      "i_dts"  -> { :list, :interval }
-    end
-  end
-
-  @doc """
-  Returns true if the key has a YZ suffix that indicates
-  a multi-value (list) type
-  """
-  def is_list_key?(key) when is_binary(key) do
-    regex = %r"_[is|fs|bs|ss|b64_ss|dts]$"
-    Regex.match?(regex, key)
-  end
 
   ## Turns anything that implements 
   ## the String.Chars protocol into an atom

@@ -1,6 +1,6 @@
-defmodule Ecto.Adapter.Riak.Datatypes do
-  alias Ecto.Adapter.Riak.Datetime, as: DateUtil
-  alias Ecto.Adapetr.Riak.JSON
+defmodule Ecto.Adapters.Riak.Datatypes do
+  alias Ecto.Adapters.Riak.Datetime, as: DateUtil
+  alias Ecto.Adapetrs.Riak.JSON
   alias :riakc_map, as: RiakMap
   alias :riakc_register, as: RiakRegister
   alias :riakc_set, as: RiakSet
@@ -23,12 +23,21 @@ defmodule Ecto.Adapter.Riak.Datatypes do
   @riak_type_register  "register"
   @riak_type_set       "set"
 
-  @register_type_int       1
+  @register_type_integer   1
   @register_type_float     2
   @register_type_boolean   3
   @register_type_binary    4
   @register_type_string    5
   @register_type_datetime  6
+  @register_type_interval  7
+
+  @ecto_type_integer   :integer
+  @ecto_type_float     :float
+  @ecto_type_boolean   :boolean
+  @ecto_type_binary    :string
+  @ecto_type_string    :string
+  @ecto_type_datetime  :datetime
+  @ecto_type_interval  :interval
 
   ## ----------------------------------------------------------------------
   ## Riak Maps
@@ -55,24 +64,15 @@ defmodule Ecto.Adapter.Riak.Datatypes do
               value = fn()-> apply(entity, field_type, []) end  ## lazy eval
               add = case field_type do
                       x when is_atom(x) ->
-                        {to_register(value, field_type), @riak_type_register}
-                      {:list, list_field_type} ->
-                        {to_set(value, list_field_type), @riak_type_set}
-                      _ ->
-                        ## Try fetch association
-                        assoc = module.__entity__(:association, field)
-                        map = assoc_to_map(assoc)
-                        if nil?(map) do
-                          nil
-                        else
-                          {map, @riak_type_map}
-                        end
+                        { to_register(value, field_type), @riak_type_register }
+                      { :list, list_field_type } ->
+                        { to_set(value, list_field_type), @riak_type_set }
                     end
               ## DONE
               if nil?(add), do: acc, else: [ add | acc ]
           end
     
-    List.foldl(fields, map, fun)
+    Enum.reduce(fields, map, fun)
   end
 
   @spec map_to_entity(storemap, entity_type) :: entity
@@ -125,7 +125,7 @@ defmodule Ecto.Adapter.Riak.Datatypes do
   def json_to_map(json), do: json_to_map(json, :undefined)
 
   def json_to_map(json, ctx) do
-    {inner} = json
+    { inner } = json
     values = Enum.map(inner, &json_to_map_worker/1)
     RiakMap.new(values, ctx)
   end
@@ -134,11 +134,11 @@ defmodule Ecto.Adapter.Riak.Datatypes do
   defp json_to_map_worker({k,v}) do
     cond do
       JSON.object?(v) ->
-        {{k,:map}, json_to_map(v)}
+        { { k, :map }, json_to_map(v) }
       is_list(v) ->
-        {{k,:set}, to_set(v)}
+        { { k, :set }, to_set(v) }
       true ->
-        {{k,:register}, to_register(v, ecto_type(v))}
+        { { k, :register }, to_register(v, ecto_type(v)) }
     end
   end
 
@@ -164,22 +164,29 @@ defmodule Ecto.Adapter.Riak.Datatypes do
   @doc """
   Generic register parsing.
   """
-  @spec from_register(register) :: term
+  @spec from_register(register | binary) :: term
+  
+  def from_register({ :riakc_register, _, _ } = reg) do
+    register_value(reg) |> from_register
+  end
+
   def from_register(x) do
-    <<flag :: integer, _ :: binary>> = RiakRegister.value(x)
+    <<flag :: integer, _ :: binary>> = x
     case flag do
       @register_type_integer ->
-        register_to_integer(x)
+        store_to_integer(x)
       @register_type_float ->
-        register_to_float(x)
+        store_to_float(x)
       @register_type_boolean ->
-        register_to_boolean(x)
+        store_to_boolean(x)
       @register_type_binary ->
-        register_to_binary(x)
+        store_to_binary(x)
       @register_type_string ->
-        register_to_string(x)
+        store_to_string(x)
       @register_type_datetime ->
-        register_to_datetime(x)
+        store_to_datetime(x)
+      @register_type_interval ->
+        store_to_interval(x)
       _ ->
         nil
     end
@@ -187,30 +194,36 @@ defmodule Ecto.Adapter.Riak.Datatypes do
 
   def to_register(x, type) do
     case type do
-      @register_type_integer ->
+      @ecto_type_integer ->
         integer_to_register(x)
-      @register_type_float ->
+      @ecto_type_float ->
         float_to_register(x)
-      @register_type_boolean ->
+      @ecto_type_boolean ->
         boolean_to_register(x)
-      @register_type_binary ->
+      @ecto_type_binary ->
         binary_to_register(x)
-      @register_type_string ->
+      @ecto_type_string ->
         string_to_register(x)
-      @register_type_datetime ->
+      @ecto_type_datetime ->
         datetime_to_register(x)
+      @ecto_type_datetime ->
+        interval_to_register(x)
       _ ->
         nil
     end
   end
 
-  def register_new(val) when is_binary(val) do
-    Register.new(val, :undefined)
+  defp register_new(val) when is_binary(val) do
+    RiakRegister.new(val, :undefined)
   end
 
-  def register_value(reg) do
-    Register.value(reg)
-  end  
+  defp register_value(bin) when is_binary(bin) do
+    bin
+  end
+  
+  defp register_value(reg) do
+    RiakRegister.value(reg)
+  end 
 
   ## ----------------------------------------------------------------------
   ## Riak Set
@@ -223,24 +236,33 @@ defmodule Ecto.Adapter.Riak.Datatypes do
   @spec from_set(storeset) :: [ term ]
   def from_set(x) do
     fun = fn(reg, acc)->
-              [from_register(reg) | acc]
+              [ from_register(reg) | acc ]
           end
     
-    RiakSet.fold(x, [], fun)
+    RiakSet.fold(fun, [], x)
     |> Enum.filter(&(&1 != nil))
+    |> Enum.reverse
   end
 
   @spec to_set([term], ecto_type) :: storeset
-  def to_set(x) do
-    to_set(x, ecto_type(x))
+
+  def to_set([]) do
+    RiakSet.new()
   end
 
-  def to_set(x, type) do
-    List.foldl(x, RiakSet.new(), fn(ele, acc)->
-                                     bin = to_register(ele, type)
-                                     RiakSet.add(acc, bin)
-                                 end)
-    |> Enum.filter(&(&1 != nil))
+  def to_set(x) when is_list(x) do
+    to_set(x, ecto_type(hd x), nil)
+  end
+
+  def to_set(x, type) when is_list(x) and is_atom(type) do
+    to_set(x, type, nil)
+  end
+
+  def to_set(x, type, existing)
+  when is_list(x) and is_atom(type) do
+    values = Enum.map(x, &(to_register(&1, type) |> register_value))
+      |> Enum.filter(&(nil != &1))
+    RiakSet.new(values, existing)
   end
 
   @spec set_fold(storeset, [term], ((term, [term])-> [term])) :: [term]
@@ -271,7 +293,7 @@ defmodule Ecto.Adapter.Riak.Datatypes do
       is_boolean(x) ->
         :boolean
       is_list(x) ->
-        {:list, hd(x) |> ecto_type}
+        { :list, hd(x) |> ecto_type }
       is_binary(x) ->
         cond do          
           String.valid?(x) -> :string
@@ -286,131 +308,107 @@ defmodule Ecto.Adapter.Riak.Datatypes do
 
   defp integer_to_register(x) do
     <<@register_type_integer, integer_to_binary(x) :: binary>>
-    |> RiakRegister.new
+    |> register_new
   end
   
-  defp register_to_integer(x) do
-    <<@register_type_integer, bin :: binary>> = RiakRegister.value(x)
-    binary_to_integer(bin)
+  defp store_to_integer(x) do
+    <<@register_type_integer, bin :: binary>> = register_value(x)
+    case Integer.parse(bin) do
+      { int, _ } -> int
+      _ -> nil
+    end
   end
 
   defp float_to_register(x) do
     <<@register_type_float, float_to_binary(x) :: binary>>
-    |> RiakRegister.new
+    |> register_new
   end
 
-  defp register_to_float(x) do
-    <<@register_type_float, bin :: binary>> = RiakRegister.value(x)
+  defp store_to_float(x) do
+    <<@register_type_float, bin :: binary>> = register_value(x)
     binary_to_float(x)
   end
 
   defp boolean_to_register(x) do
     flag = if x, do: 1, else: 0
     <<@register_type_boolean, flag :: integer>>
-    |> RiakRegister.new
+    |> register_new
   end
 
-  defp register_to_boolean(x) do
-    <<@register_type_boolean, flag :: integer>> = RiakRegister.value(x)
+  defp store_to_boolean(x) do
+    <<@register_type_boolean, flag :: integer>> = register_value(x)
     flag == 1
   end
 
   defp binary_to_register(x) do
     <<@register_type_binary, x :: binary>>
-    |> RiakRegister.new
+    |> register_new
   end
 
-  defp register_to_binary(x) do
-    <<@register_type_binary, bin :: binary>> = RiakRegister.value(x)
+  defp store_to_binary(x) do
+    <<@register_type_binary, bin :: binary>> = register_value(x)
     bin
   end
 
   defp string_to_register(x) do
     case String.valid?(x) do
-      true -> <<@register_type_string, x :: binary>>
-              |> RiakRegister.new
-      _    -> raise "invalid string"
+      true ->
+        <<@register_type_string, x :: binary>>
+          |> register_new
+      _ ->
+        raise DatatypeError,
+          message: "string_to_register/1 invalid input #{inspect x}"
     end
   end
 
-  defp register_to_string(x) do
-    <<@register_type_string, str :: binary>> = RiakRegister.value(x)
+  defp store_to_string(x) do
+    <<@register_type_string, str :: binary>> = register_value(x)
     str
   end
 
   defp datetime_to_register(x) do
-    bin = DateUtil.to_string(x)
+    bin = DateUtil.datetime_to_string(x)
     <<@register_type_datetime, bin :: binary>>
-    |> RiakRegister.new
+    |> register_new
   end
 
-  defp register_to_datetime(x) do
-    <<@register_type_datetime, bin :: binary>> = RiakRegister.value(x)
-    DateUtil.parse(bin)
+  defp store_to_datetime(x) do
+    <<@register_type_datetime, bin :: binary>> = register_value(x)
+    DateUtil.parse_to_ecto_datetime(bin)
   end
 
-  @assoc_key_type          "t"
-  @assoc_key_primary_key   "pk"
-  @assoc_key_foreign_key   "fk"
-  @assoc_key_owner_id      "owner"  ## only for belongs_to
-  @assoc_key_member_list   "many"   ## only for has_many
-  @assoc_key_other_id      "one"    ## only for has_one
-
-  @assoc_type_has_many    1
-  @assoc_type_has_one     2
-  @assoc_type_belongs_to  10
-
-  defp assoc_to_map(x) when is_record(x, Ecto.Reflections.BelongsTo) do
-    owner_id = nil
-    map_new()
-    |> map_put({@assoc_key_type, :integer}, @assoc_type_belongs_to)
-    |> map_put({@assoc_key_primary_key, :string},
-               x.primary_key |> atom_to_binary)
-    |> map_put({@assoc_key_foreign_key, :string},
-               x.foreign_key |> atom_to_binary)
-    |> map_put(@assoc_key_owner_id, owner_id)
+  defp interval_to_register(x) do
+    bin = DateUtil.interval_to_string(x)
+    <<@register_type_interval, bin :: binary>>
+    |> register_new
   end
 
-  defp assoc_to_map(x) when is_record(x, Ecto.Reflections.HasMany) do
-    member_ids = []
-    map_new()
-    |> map_put({ @assoc_key_type, :integer }, @assoc_type_has_many)
-    |> map_put({ @assoc_key_primary_key, :string },
-               x.primary_key |> atom_to_binary)
-    |> map_put({ @assoc_key_foreign_key, :string },
-               x.foreign_key |> atom_to_binary)
-    |> map_put(@assoc_key_member_list, to_set(member_ids, :binary))
+  defp store_to_interval(x) do
+    <<@register_type_interval, bin :: binary>> = register_value(x)
+    DateUtil.parse_to_ecto_interval(bin)
   end
 
-  defp assoc_to_map(x) when is_record(x, Ecto.Reflections.HasOne) do
-    other_id = nil
-    map_new()
-    |> map_put({ @assoc_key_type, :integer }, @assoc_type_has_one)
-    |> map_put({ @assoc_key_primary_key, :string },
-               x.primary_key |> atom_to_binary)
-    |> map_put({ @assoc_key_foreign_key, :string },
-               x.foreign_key |> atom_to_binary)
-    |> map_put({ @assoc_key_other_id, :binary }, other_id)
+  ## ----------------------------------------------------------------------
+  ## Key and Value De/Serialization
+  ## ----------------------------------------------------------------------
+
+  ## default schema --
+  ## https://github.com/basho/yokozuna/blob/master/priv/default_schema.xml
+
+  @yz_key_regex  %r"_(counter|flag|register|set)$"
+  
+  defp key_from_yz(key) do
+    Regex.replace(@yz_key_regex, to_string(key), "")
   end
 
-  defp assoc_to_map(_), do: nil
-
-  defp map_to_assoc(x) do
-    type = map_get(x, { @assoc_key_type, :integer })
-    case type do
-      @assoc_type_has_many ->
-        :ok
-      @assoc_type_has_one ->
-        :ok
-      @assoc_type_belongs_to ->
-        :ok
-      _ ->
-        nil
-    end
-  end
-
-  defp map_to_assoc_has_many(x) do
-    :ok
+  defp yz_key(key, type) do
+    to_string(key) <> "_" <>
+      case type do
+        { :list, list_type } ->
+          "set"
+        _ ->
+          "register"
+      end
   end
 
 end

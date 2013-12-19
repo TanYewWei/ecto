@@ -18,3 +18,5 @@ defexception Ecto.Adapters.Riak.MigrationModulesException,
 end
 
 defexception Ecto.Adapters.Riak.AdapterStartError, [:message]
+
+defexception Ecto.Adapters.Riak.DatatypeError, [:message]

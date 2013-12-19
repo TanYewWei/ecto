@@ -21,7 +21,7 @@ defmodule Ecto.Adapters.Riak.Object do
     fields = RiakUtil.entity_keyword(entity)
     fields = Enum.map(fields, fn({ k, v })->
       type = RiakUtil.entity_field_type(entity, k)
-      key = RiakUtil.yz_key(to_string(k), type)
+      key = yz_key(to_string(k), type)
       val = cond do
         is_record(v, Ecto.DateTime) ->
           Datetime.datetime_to_string(v)
@@ -118,7 +118,7 @@ defmodule Ecto.Adapters.Riak.Object do
     ops = Enum.reduce(dict,
                       [],
                       fn({ k, v }, acc)->
-                          k = RiakUtil.key_from_yz(k) |> RiakUtil.to_atom
+                          k = key_from_yz(k) |> RiakUtil.to_atom
                           if is_list(v) do
                             ## add-wins behaviour
                             [:statebox_orddict.f_union(k,v) | acc]
@@ -197,6 +197,77 @@ defmodule Ecto.Adapters.Riak.Object do
     else
       (name_str <> suffix) |> RiakUtil.to_atom
     end
+  end
+
+  ## ----------------------------------------------------------------------
+  ## Key and Value De/Serialization
+  ## ----------------------------------------------------------------------
+
+  @yz_key_regex  %r"_(i|is|f|fs|b|bs|b64_s|b64_ss|s|ss|i_dt|i_dts|dt|dts)$"
+
+  @spec key_from_yz(binary) :: binary
+  defp key_from_yz(key) do
+    ## Removes the default YZ schema suffix from a key.
+    ## schema ref: https://github.com/basho/yokozuna/blob/develop/priv/default_schema.xml
+    Regex.replace(@yz_key_regex, to_string(key), "")
+  end
+
+  @spec yz_key(binary, atom | { :list, atom }) :: binary
+  defp yz_key(key, type) do
+    ## Adds a YZ schema suffix to a key depending on its type.
+    to_string(key) <> "_" <>
+      case type do
+        :integer  -> "i"
+        :float    -> "f"
+        :binary   -> "b64_s"
+        :string   -> "s"
+        :boolean  -> "b"
+        :datetime -> "dt"
+        :interval -> "i_dt"
+        { :list, list_type } ->
+          case list_type do
+            :integer  -> "is"
+            :float    -> "fs"
+            :binary   -> "b64_ss"
+            :string   -> "ss"
+            :boolean  -> "bs"
+            :datetime -> "dts"
+            :interval -> "i_dts"
+          end
+      end
+  end
+
+  defp yz_key_atom(key, type) do
+    yz_key(key, type) |> RiakUtil.to_atom
+  end
+
+  @spec yz_key_type(binary) :: atom | {:list, atom}
+  defp yz_key_type(key) do
+    [suffix] = Regex.run(@yz_key_regex, key)
+      |> Enum.filter(&String.starts_with?(&1, "_"))
+    case suffix do
+      "i"      -> :integer
+      "f"      -> :float
+      "b64_s"  -> :binary
+      "s"      -> :string
+      "b"      -> :boolean
+      "dt"     -> :datetime
+      "i_dt"   -> :interval
+      "is"     -> { :list, :integer }
+      "fs"     -> { :list, :float }
+      "b64_ss" -> { :list, :binary }
+      "ss"     -> { :list, :string }
+      "bs"     -> { :list, :boolean }
+      "dts"    -> { :list, :datetime }
+      "i_dts"  -> { :list, :interval }
+    end
+  end
+
+  defp is_list_key?(key) when is_binary(key) do
+    ## Returns true if the key has a YZ suffix that indicates
+    ## a multi-value (list) type
+    regex = %r"_[is|fs|bs|ss|b64_ss|dts]$"
+    Regex.match?(regex, key)
   end
 
 end
