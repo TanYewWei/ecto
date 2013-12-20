@@ -20,3 +20,14 @@ end
 defexception Ecto.Adapters.Riak.AdapterStartError, [:message]
 
 defexception Ecto.Adapters.Riak.DatatypeError, [:message]
+
+defexception Ecto.Adapters.Riak.RequiredFieldUndefinedError,
+  [:field, :entity] do
+  @moduledoc """
+  Using `Ecto.RiakModel`s requires that certain fields be
+  defined for use with Migrations and Conflict resolution.
+  This exception is raised if any of those fields are not set.
+  """
+  def message(e) do
+  end
+end

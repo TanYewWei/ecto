@@ -69,6 +69,17 @@ defmodule Ecto.Adapters.Riak.Util do
   def entity_field_type(entity, field) do
     elem(entity, 0).__entity__(:field_type, field)
   end
+
+  @spec entity_name_from_model(binary | atom) :: atom
+  def entity_name_from_model(name) when is_binary(name) or is_atom(name) do
+    name_str = to_string(name)
+    suffix = ".Entity"
+    if String.ends_with?(name_str, suffix) do
+      name |> to_atom
+    else
+      (name_str <> suffix) |> to_atom
+    end
+  end
   
   @doc """
   Checks if an entity passes a basic Riak Entity validation.
