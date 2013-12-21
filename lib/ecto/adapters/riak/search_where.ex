@@ -1,5 +1,6 @@
 defmodule Ecto.Adapters.Riak.SearchWhere  do
-  alias Ecto.Adapters.Riak.Util, as: SearchUtil
+  alias Ecto.Adapters.Riak.Util, as: RiakUtil
+  alias Ecto.Adapters.Riak.Object, as: RiakObj
   alias Ecto.Query.QueryExpr
   alias Ecto.Query.Util
   require Ecto.Adapters.Riak.Datetime, as: Datetime
@@ -21,11 +22,10 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   end
 
   defp where_expr({:., _, [{:&, _, [_]}=var, field]}, sources) when is_atom(field) do
-    #IO.puts("var: #{inspect var}, sources: #{inspect sources}")
     source = Util.find_source(sources, var)
     entity = Util.entity(source)
     type = entity.__entity__(:field_type, field)
-    SearchUtil.yz_key(field, type)
+    RiakObj.yz_key(field, type)
   end
 
   defp where_expr({:!, _, [expr]}, sources) do

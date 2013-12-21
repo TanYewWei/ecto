@@ -7,17 +7,8 @@ System.put_env("ECTO_EDITOR", "")
 Code.require_file "support/file_helpers.exs", __DIR__
 Code.require_file "support/compile_helpers.exs", __DIR__
 
-defmodule Ecto.UnitTest.Model do
-  defmacro __using__(_) do
-    quote do
-      @queryable_defaults primary_key: { :id, :string, [] }
-      use Ecto.Model
-    end
-  end
-end
-
-defmodule Ecto.UnitTest.Post do
-  use Ecto.UnitTest.Model
+defmodule Ecto.Test.Riak.Post do
+  use Ecto.RiakModel
 
   queryable "posts" do
     field :title, :string
@@ -31,8 +22,8 @@ defmodule Ecto.UnitTest.Post do
   end
 end
 
-defmodule Ecto.UnitTest.Comment do
-  use Ecto.UnitTest.Model
+defmodule Ecto.Test.Riak.Comment do
+  use Ecto.RiakModel
 
   queryable "comments" do
     field :text, :string
@@ -44,8 +35,8 @@ defmodule Ecto.UnitTest.Comment do
   end
 end
 
-defmodule Ecto.UnitTest.Permalink do
-  use Ecto.UnitTest.Model
+defmodule Ecto.Test.Riak.Permalink do
+  use Ecto.RiakModel
 
   queryable "permalinks" do
     field :url, :string
@@ -53,8 +44,8 @@ defmodule Ecto.UnitTest.Permalink do
   end
 end
 
-defmodule Ecto.UnitTest.User do
-  use Ecto.UnitTest.Model
+defmodule Ecto.Test.Riak.User do
+  use Ecto.RiakModel
 
   queryable "users" do
     field :name, :string
@@ -62,8 +53,8 @@ defmodule Ecto.UnitTest.User do
   end
 end
 
-defmodule Ecto.UnitTest.Custom do
-  use Ecto.UnitTest.Model
+defmodule Ecto.Test.Riak.Custom do
+  use Ecto.RiakModel
 
   queryable "customs", primary_key: false do
     field :foo, :string, primary_key: true

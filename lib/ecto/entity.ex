@@ -237,6 +237,16 @@ defmodule Ecto.Entity do
       @ecto_model opts[:model]
       field(:model, :virtual, default: opts[:model])
 
+      ## Default fields
+      Enum.map(opts[:default_fields] || [], fn field ->
+        case field do
+          { name, type, opts } ->
+            field(name, type, opts)
+          other ->
+            raise ArgumentError, message: ":default_fields must contain { name, type, opts } tuples"
+        end
+      end)
+
       case opts[:primary_key] do
         nil ->
           field(:id, :integer, primary_key: true)

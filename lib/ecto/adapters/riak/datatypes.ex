@@ -75,6 +75,7 @@ defmodule Ecto.Adapters.Riak.Datatypes do
         type when is_atom(type) ->
           { { key, @riak_type_register }, to_store(val, field_type) }
         { :list, :boolean  } ->
+          ## boolean lists are stored as registers
           { { key, @riak_type_register }, boolean_list_to_store(val) }
         { :list, list_field_type } ->
           { { key, @riak_type_set }, to_set(val, list_field_type) }        
@@ -113,7 +114,6 @@ defmodule Ecto.Adapters.Riak.Datatypes do
 
   @spec map_get(storemap, key, term) :: value
   def map_get(map, { _, type } = key, default // nil) do
-    ##IO.puts("map_get key: #{inspect key}, val: #{inspect RiakMap.find(key, map)}, map: #{inspect map}")
     case RiakMap.find(key, map) do
       { :ok, value } when value != nil ->
         case type do
@@ -234,7 +234,6 @@ defmodule Ecto.Adapters.Riak.Datatypes do
   @spec from_set(storeset) :: [ term ]
   
   def from_set({ :register, _, _ } = x) do
-    ##IO.puts("from_set bool_list: #{inspect register_value(x)}")
     store_to_boolean_list(x)
   end
 

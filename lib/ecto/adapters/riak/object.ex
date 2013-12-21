@@ -17,37 +17,51 @@ defmodule Ecto.Adapters.Riak.Object do
   @json_key_statebox_ts "ectots_l"
 
   @spec entity_to_object(entity) :: object
+  
   def entity_to_object(entity) do
-    fields = RiakUtil.entity_keyword(entity)
-    fields = Enum.map(fields, fn({ k, v })->
-      type = RiakUtil.entity_field_type(entity, k)
-      key = yz_key(to_string(k), type)
-      val = cond do
-        is_record(v, Ecto.DateTime) ->
-          Datetime.datetime_to_string(v)
-        is_record(v, Ecto.Interval) ->
-          Datetime.interval_to_string(v)
-        is_record(v, Ecto.Binary) ->
-          :base64.encode(v.value)
-        true ->
-          JSON.maybe_null(v)
-          #v
-      end
-      { key, val }
-    end)
-    fields = Enum.filter(fields, fn({ _, v })-> v != nil end)
-    fields = [ { @json_key_model_name, to_string(entity.model) },
-               { @json_key_statebox_ts, timestamp() }
-               | fields ]
+    context = entity.riak_context
+    ts = timestamp
 
+    kws = RiakUtil.entity_keyword(entity)
+    ##IO.puts("entity_to_object: #{inspect kws}")
+    kws = Enum.reduce(kws, [], fn { key, val }, acc ->
+      hash = context[key] 
+      val_hash = value_hash(val)
+
+      type = RiakUtil.entity_field_type(entity, key)
+      json_key = yz_key(to_string(key), type)
+      json_val = cond do
+        is_record(val, Ecto.DateTime) ->
+          Datetime.datetime_to_string(val)
+        is_record(val, Ecto.Interval) ->
+          Datetime.interval_to_string(val)
+        is_record(val, Ecto.Binary) ->
+          :base64.encode(val.value)
+        true ->
+          JSON.maybe_null(val)
+      end
+
+      if nil?(hash) || val_hash == hash do
+        ## value did not change since last update
+        [{ json_key, json_val } | acc]
+      else
+        ## append statebox timestamp
+        ts_key = statebox_timestamp_key(key)
+        [{ ts_key, ts }, { json_key, json_val } | acc]
+      end
+    end)
+
+    kws = [{ @json_key_model_name, to_string(entity.model) } | kws]
+    
     ## Form riak object
     bucket = RiakUtil.model_bucket(entity.model)
     key = entity.primary_key
-    value = JSON.encode({ fields })
+    value = JSON.encode({ kws })
     RiakObject.new(bucket, key, value, @content_type)
   end
 
   @spec object_to_entity(object) :: entity
+  
   def object_to_entity(object) do
     case RiakObject.get_values(object) do
       [] ->
@@ -59,6 +73,19 @@ defmodule Ecto.Adapters.Riak.Object do
       values ->
         resolve_siblings(values)
     end
+      |> build_riak_context
+  end
+
+  defp statebox_timestamp_key(key) do
+    "_sb_ts_#{key}"
+  end
+
+  def build_riak_context(entity) do
+    kws = RiakUtil.entity_keyword(entity)
+    context = Enum.map(kws, fn { key, val } ->
+      { key, if(nil?(val), do: nil, else: value_hash(val)) }
+    end)
+    entity.riak_context(context)
   end
 
   @doc """
@@ -80,58 +107,55 @@ defmodule Ecto.Adapters.Riak.Object do
 
   @spec resolve_value(binary) :: entity
   defp resolve_value(value) do
-    resolve_json(value) |> statebox_to_entity
+    resolve(value) |> statebox_to_entity
   end
 
   @spec resolve_siblings([binary | json]) :: entity
   def resolve_siblings(values) do
-    stateboxes = Enum.map(values, &resolve_json/1)
+    stateboxes = Enum.map(values, &resolve/1)
     statebox = :statebox_orddict.from_values(stateboxes)
     statebox = :statebox.truncate(0, statebox)
     statebox_to_entity(statebox)
   end
 
-  @spec resolve_json(json) :: statebox
-  def resolve_json(nil), do: nil
+  @spec resolve(binary | json) :: statebox
 
-  def resolve_json(bin) when is_binary(bin) do
-    JSON.decode(bin) |> resolve_json
-  end
+  defp resolve(nil), do: nil
 
-  def resolve_json(json) do
-    { inner } = json
-    resolve_listdict(inner)
-  end
+  defp resolve(bin) when is_binary(bin), do: JSON.decode(bin) |> resolve
 
-  @spec resolve_listdict(ListDict) :: statebox
-  defp resolve_listdict(dict) do
-    meta_keys = [ @json_key_model_name, @json_key_statebox_ts ]
-    { meta, attr } = Dict.split(dict, meta_keys)
+  defp resolve({ inner } = json) do
+    { ops,        ## timestamp-independent ops
+      timestamp,  ## timestamp to do :statebox.modify/3 with
+      ts_ops      ## timestamp-dependent ops
+    } =
+      Enum.reduce(inner, { [], 2, [] }, fn kv, acc ->
+        { json_key, json_val } = kv
+        { _ops, _timestamp, _ts_ops } = acc
+        key_str = key_from_yz(json_key)
+        key = RiakUtil.to_atom(key_str)
 
-    ## Get entity info.
-    ## This is needed to remove YZ suffixes used for search indexing
-    module = Dict.get(meta, @json_key_model_name)
-      |> entity_name_from_model            
+        if is_list(json_val) do
+          ## always use add-wins behaviour with lists
+          { [:statebox_orddict.f_union(key, json_val) | _ops], _timestamp, _ts_ops }
+        else
+          ## resolve last write with all other values
+          ts_key = statebox_timestamp_key(key_str)   
+          ts = JSON.get(json, ts_key)
+          val = JSON.maybe_nil(json_val)
+          if ts do
+            ts = if ts > _timestamp, do: ts, else: _timestamp
+            { _ops, ts, [:statebox_orddict.f_store(key, val) | _ts_ops] }
+          else
+            { [:statebox_orddict.f_store(key, val) | _ops], _timestamp, _ts_ops }
+          end
+        end
+      end)
 
-    ## Map over json values and create statebox update operations.
-    ## Note that we never create nested JSON objects from Ecto entities.
-    ops = Enum.reduce(dict,
-                      [],
-                      fn({ k, v }, acc)->
-                          k = key_from_yz(k) |> RiakUtil.to_atom
-                          if is_list(v) do
-                            ## add-wins behaviour
-                            [:statebox_orddict.f_union(k,v) | acc]
-                          else
-                            v = JSON.maybe_nil(v)
-                            [:statebox_orddict.f_store(k,v) | acc]
-                          end
-                      end)
-    statebox = :statebox.modify(ops, :statebox_orddict.from_values([]))
-    
-    ## Create new statebox and set Timestamp
-    timestamp = Dict.get(meta, @json_key_statebox_ts, timestamp())
-    set_elem(statebox, 3, timestamp)  ## 3rd element is timestamp    
+    ## Construct statebox with straightforward ops,
+    ## then modify with timestamped ops
+    box = :statebox.modify(1, ops, :statebox.new(0, fn() -> [] end))
+    :statebox.modify(timestamp, ts_ops, box)
   end
 
   def statebox_to_entity(statebox) do
@@ -140,7 +164,7 @@ defmodule Ecto.Adapters.Riak.Object do
     entity_module = entity_name_from_model(model)
     
     ## Use module to get available fields 
-    ## and create new entity
+    ## and create new entity    
     entity_fields = entity_module.__entity__(:field_names)
     Enum.map(entity_fields, fn(x)->
       case :orddict.find(x, values) do
@@ -206,14 +230,14 @@ defmodule Ecto.Adapters.Riak.Object do
   @yz_key_regex  %r"_(i|is|f|fs|b|bs|b64_s|b64_ss|s|ss|i_dt|i_dts|dt|dts)$"
 
   @spec key_from_yz(binary) :: binary
-  defp key_from_yz(key) do
+  def key_from_yz(key) do
     ## Removes the default YZ schema suffix from a key.
     ## schema ref: https://github.com/basho/yokozuna/blob/develop/priv/default_schema.xml
     Regex.replace(@yz_key_regex, to_string(key), "")
   end
 
   @spec yz_key(binary, atom | { :list, atom }) :: binary
-  defp yz_key(key, type) do
+  def yz_key(key, type) do
     ## Adds a YZ schema suffix to a key depending on its type.
     to_string(key) <> "_" <>
       case type do
@@ -268,6 +292,11 @@ defmodule Ecto.Adapters.Riak.Object do
     ## a multi-value (list) type
     regex = %r"_[is|fs|bs|ss|b64_ss|dts]$"
     Regex.match?(regex, key)
+  end
+
+  defp value_hash(term) do
+    bin = term_to_binary(term, minor_version: 1)
+    :crypto.hash(:sha256, bin)
   end
 
 end

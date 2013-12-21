@@ -23,7 +23,8 @@ defmodule Ecto.Model.QueryableTest do
 
   defmodule DefaultUser do
     @queryable_defaults primary_key: { :uuid, :string, [] },
-                        foreign_key_type: :string
+                        foreign_key_type: :string,
+                        default_fields: [ { :version, :integer, [] } ]
     use Ecto.Model.Queryable
 
     queryable "users" do
@@ -40,6 +41,7 @@ defmodule Ecto.Model.QueryableTest do
   test "uses @queryable_defaults" do
     assert DefaultUser.new(uuid: "abc").uuid == "abc"
     assert DefaultUser.Entity.__entity__(:field, :comment_id) == [type: :string]
+    assert DefaultUser.new(version: 1).version == 1
   end
 
   test "delegates to the given entity" do

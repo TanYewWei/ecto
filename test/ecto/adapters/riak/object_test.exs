@@ -1,7 +1,7 @@
 defmodule Ecto.Adapters.Riak.ObjectTest do
   use ExUnit.Case, async: true
 
-  alias Ecto.UnitTest.Post
+  alias Ecto.Test.Riak.Post
   alias Ecto.Adapters.Riak.Datetime
   alias Ecto.Adapters.Riak.JSON
   alias Ecto.Adapters.Riak.Object
@@ -24,31 +24,19 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
     object = Object.entity_to_object(entity)
     new_entity = Object.object_to_entity(object) ##.temp(entity.temp)
     new_entity = new_entity.temp("test temp")
+    new_entity = new_entity.riak_context([])  ## nullify context for comparison
     assert new_entity == entity.id(new_entity.id)
   end
 
-  test "(entity_to_object <-> object_to_entity) with siblings" do
-    ## We can't test this directly using
-    ## the object_to_entity/1 function because a :riakc_obj
-    ## comes packaged in a unique format
-    ## 
-    ## Instead, we'll call the resolve_siblings/1 function directly
+  test "(entity_to_object <-> object_to_entity) with siblings" do    
+    e0 = mock_post() |> Object.build_riak_context
+    e1 = e0.title("test title 1").count(7)
+    e2 = e0.rating(6)
     
-    e0 = mock_post()
-    e1 = e0.title("test title 1")
-    e1 = e1.count(7)
-    e2 = e1.rating(6)
-    
-    ## Set timestamps
-    ts_key = "ectots_l"
     j0 = Object.entity_to_object(e0) |> object_updatedvalue |> JSON.decode
     j1 = Object.entity_to_object(e1) |> object_updatedvalue |> JSON.decode
     j2 = Object.entity_to_object(e2) |> object_updatedvalue |> JSON.decode
-    t0 = JSON.get(j0, ts_key)
-    j1 = JSON.put(j1, ts_key, t0+1)
-    j2 = JSON.put(j2, ts_key, t0+2)
-
-    ## e1 attributes should take precedence
+    
     entity = Object.resolve_siblings([ j0, j1, j2 ])
     assert entity.id == e0.id
     assert entity.title == e1.title
