@@ -23,7 +23,6 @@ defmodule Ecto.Adapters.Riak.Object do
     ts = timestamp
 
     kws = RiakUtil.entity_keyword(entity)
-    ##IO.puts("entity_to_object: #{inspect kws}")
     kws = Enum.reduce(kws, [], fn { key, val }, acc ->
       hash = context[key] 
       val_hash = value_hash(val)

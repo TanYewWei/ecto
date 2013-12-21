@@ -1,3 +1,5 @@
+Code.require_file "test_helper.exs", __DIR__
+
 defmodule Ecto.Adapters.Riak.SearchTest do
   use ExUnit.Case, async: true
   
@@ -6,7 +8,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   import Ecto.Query.Util, only: [normalize: 1]
   alias Ecto.Adapters.Riak.Search
   alias Ecto.Adapters.Riak.Datetime
-  alias Ecto.UnitTest.Post
+  alias Ecto.Test.Riak.Post
   
   defp test_query(query, expected) do
     { { _, _, querystring, _ }, _ } = Search.query(query |> normalize)

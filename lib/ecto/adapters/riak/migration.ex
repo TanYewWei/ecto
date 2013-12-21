@@ -45,7 +45,7 @@ defmodule Ecto.Adapters.Riak.Migration do
   defcallback migrate_from_newer(entity) :: entity
 
   @doc "Returns the version number for the model"
-  defcallback version() :: binary
+  defcallback version() :: integer
 
   @doc """
   Checks if a module implements the Ecto.Adapters.Riak.Migration behaviour
