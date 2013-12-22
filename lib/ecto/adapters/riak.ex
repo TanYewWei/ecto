@@ -51,7 +51,7 @@ defmodule Ecto.Adapters.Riak do
             message: "Must have at least one valid pooler config to start Riak Adapter"
         end
 
-        Enum.map(pool_opts, fn(config)->
+        Enum.map(pool_opts, fn config ->
           case PoolSup.new_pool(config) do
             { :ok, pid } when is_pid(pid) ->
               pid
@@ -64,7 +64,7 @@ defmodule Ecto.Adapters.Riak do
         ## Setup search indexes for all models
         :timer.sleep(500)
         failed_index_res = use_worker(repo, &Search.search_index_reload_all(&1))
-          |> Enum.filter(fn({ _, res })-> res != :ok end)
+          |> Enum.filter(fn { _, res } -> res != :ok end)
         if length(failed_index_res) > 0 do
           raise AdapterStartError,
             message: "Failed to create search indexs for required models: #{inspect failed_index_res}"
@@ -74,7 +74,7 @@ defmodule Ecto.Adapters.Riak do
         { :ok, supervisor }
       _ ->
         raise AdapterStartError,
-        message: "pooler supervisor failed to start"
+          message: "pooler supervisor failed to start"
     end
   end
 
@@ -150,7 +150,7 @@ defmodule Ecto.Adapters.Riak do
   def create(repo, entity) do
     entity = RiakObj.create_primary_key(entity)
     object = RiakObj.entity_to_object(entity)
-    fun = fn(socket)-> Riak.put(socket, object, @put_options) end
+    fun = fn socket -> Riak.put(socket, object, @put_options) end
     
     case use_worker(repo, fun) do
       { :ok, new_object } ->
@@ -184,14 +184,14 @@ defmodule Ecto.Adapters.Riak do
     query = Util.normalize(query)
     { query_tuple, post_proc_fun } = Search.query(query)
 
-    fun = fn(socket)->
+    fun = fn socket ->
       case Search.execute(socket, query_tuple, post_proc_fun) do
         entities when is_list(entities) ->
-          objects = Enum.map(entities, fn(entity)->
+          objects = Enum.map(entities, fn entity ->
             entity.update(values) |> RiakObj.entity_to_object
           end)
           
-          Enum.reduce(objects, 0, fn(object, acc)->
+          Enum.reduce(objects, 0, fn object, acc ->
             case Riak.put(socket, object) do
               :ok -> acc + 1
               _   -> acc
@@ -212,7 +212,7 @@ defmodule Ecto.Adapters.Riak do
   def delete(repo, entity) do
     bucket = RiakUtil.model_bucket(entity.model)
     key = entity.primary_key
-    fun = fn(socket)-> Riak.delete(socket, bucket, key) end
+    fun = fn socket -> Riak.delete(socket, bucket, key) end
     case use_worker(repo, fun) do
       :ok -> 1
       rsn -> rsn
@@ -228,10 +228,10 @@ defmodule Ecto.Adapters.Riak do
     query = Util.normalize(query)
     { query_tuple, post_proc_fun } = Search.query(query)
 
-    fun = fn(socket)->
+    fun = fn socket ->
       case Search.execute(socket, query_tuple, post_proc_fun) do
         entities when is_list(entities) ->
-          Enum.reduce(entities, 0, fn(entity, acc)->
+          Enum.reduce(entities, 0, fn entity, acc ->
             bucket = RiakUtil.model_bucket(entity.model)
             key = entity.primary_key
             case Riak.delete(socket, bucket, key) do

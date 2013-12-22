@@ -242,6 +242,21 @@ defmodule Ecto.Adapters.Riak.SearchTest do
     expected = Enum.map(posts, &(&1.id)) |> Enum.sort
     assert expected == post_proc.(posts) |> Enum.sort
   end
+
+  test "order_by" do
+    base = from(p in Post)
+    [p0, p1, p2, p3, p4] = posts = mock_posts()
+
+    { _, post_proc } = order_by(base, [p], p.title)
+      |> normalize |> Search.query
+    expected = posts
+    assert expected == post_proc.(posts)
+
+    { _, post_proc } = order_by(base, [p], [desc: p.title])
+      |> normalize |> Search.query
+    expected = Enum.reverse(posts)
+    assert expected == post_proc.(posts)
+  end
   
   defp mock_posts() do
     [ mock_post,

@@ -33,7 +33,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
     ## Note that because joins are not suppoted in Riak
     ## you can only perform select transformstions on the 
     ## model referenced in the `from` clause
-    fn(entities)->
+    fn entities ->
         cond do
           entities == [] ->
             []
@@ -57,7 +57,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
     |> list_to_tuple
   end
 
-  defp select_transform({_, _}=tuple, entity) do
+  defp select_transform({ _, _ } = tuple, entity) do
     select_transform(tuple_to_list(tuple), entity)
     |> list_to_tuple
   end
@@ -69,12 +69,12 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
              end)
   end
 
-  defp select_transform({{:., _, [{:&, _, [_]}, field]}, _, _}, entity) when is_atom(field) do
+  defp select_transform({ { :., _, [{ :&, _, [_] }, field] }, _, _ }, entity) when is_atom(field) do
     ## attribute accessor
     SearchUtil.entity_keyword(entity)[field]
   end
 
-  defp select_transform({fun, _, _}, _)
+  defp select_transform({ fun, _, _ }, _)
   when is_atom(fun) and fun in @funs do
     case fun do
       :random ->
@@ -90,7 +90,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
     end
   end
 
-  defp select_transform({op, _, args}, entity)
+  defp select_transform({ op, _, args }, entity)
   when is_atom(op) and length(args) == 1 and op in @unary_ops do
     arg = select_transform(Enum.first(args), entity)
     case op do
@@ -109,7 +109,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
     end
   end
 
-  defp select_transform({op, _, [left, right]}, entity)
+  defp select_transform({ op, _, [left, right] }, entity)
   when is_atom(op) and op in @binary_ops do
     left = select_transform(left, entity)
     right = select_transform(right, entity)
@@ -151,11 +151,11 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
     end
   end
 
-  defp select_transform({:&, _, [_]}, entity) do
+  defp select_transform({ :&, _, [_] }, entity) do
     entity
   end
 
-  defp select_transform({op, _, args}, entity) do
+  defp select_transform({ op, _, args }, entity) do
     raise Ecto.QueryError, reason: "Riak select unknown op: #{op}/#{length(args)}"
   end
 
@@ -167,8 +167,8 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
   ## Aggregate Transforms
   ## ----------------------------------------------------------------------
 
-  defp select_aggregate_transform({{:., _, [_, field]}, _, _}, entities) when is_atom(field) do
-    Enum.map(entities, fn(x)-> SearchUtil.entity_keyword(x)[field] end)
+  defp select_aggregate_transform({ { :., _, [_, field] }, _, _ }, entities) when is_atom(field) do
+    Enum.map(entities, fn x -> SearchUtil.entity_keyword(x)[field] end)
   end
 
   defp select_aggregate_transform({op, _, args}, entities)
@@ -177,14 +177,14 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
     {{:., _, [{:&, _, _}, field]}, _, _} = hd(args)
     
     ## Extractor functions
-    value_fn = fn(entity)-> SearchUtil.entity_keyword(entity)[field] end
-    value_type_fn = fn(entity)-> SearchUtil.entity_field_type(entity, field) end
+    value_fn = fn entity -> SearchUtil.entity_keyword(entity)[field] end
+    value_type_fn = fn entity -> SearchUtil.entity_field_type(entity, field) end
     
     ## Dispatch
     case op do
       :avg ->
         length = length(entities)
-        sum = Enum.reduce(entities, 0, fn(entity, acc)-> acc + value_fn.(entity) end)
+        sum = Enum.reduce(entities, 0, fn entity, acc -> acc + value_fn.(entity) end)
         sum / length
       :count ->
         length(entities)
@@ -195,7 +195,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
         Enum.map(entities, value_fn)
         |> Enum.min
       :sum ->
-        Enum.reduce(entities, 0, fn(entity, acc)->
+        Enum.reduce(entities, 0, fn entity, acc ->
                                      value = value_fn.(entity)
                                      value = case value_type_fn.(entity) do
                                                :integer -> round(value)

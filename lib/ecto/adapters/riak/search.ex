@@ -10,6 +10,7 @@ defmodule Ecto.Adapters.Riak.Search do
   alias Ecto.Adapters.Riak.Migration
   alias Ecto.Adapters.Riak.Object
   alias Ecto.Adapters.Riak.SearchHaving
+  alias Ecto.Adapters.Riak.SearchOrderBy
   alias Ecto.Adapters.Riak.SearchSelect
   alias Ecto.Adapters.Riak.SearchWhere
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
@@ -126,7 +127,7 @@ defmodule Ecto.Adapters.Riak.Search do
 
     ## Build Query Part
     where    = SearchWhere.query(query.wheres, sources)    
-    order_by = order_by(query.order_bys, sources)
+    ##order_by = order_by(query.order_bys, sources)
     limit    = limit(query.limit)
     offset   = offset(query.offset)
     
@@ -134,19 +135,21 @@ defmodule Ecto.Adapters.Riak.Search do
     querystring = Enum.join([where])
     querystring = if querystring == "", do: "*:*", else: querystring 
     
-    options = List.flatten([order_by, limit, offset])
+    options = List.flatten([limit, offset])
       |> Enum.filter(&(nil != &1))
     query_part = { search_index, bucket, querystring, options }
 
     ## Build Post-processing function
     group_by = group_by(query.group_bys)
     having   = SearchHaving.post_proc(query.havings)
+    order_by = SearchOrderBy.post_proc(query.order_bys, sources)
     select   = SearchSelect.post_proc(query.select)
-    post_proc = fn(entities)->                    
-                    group_by.(entities)
-                    |> having.()
-                    |> select.()
-                end
+    post_proc = fn entities ->                    
+      group_by.(entities)
+      |> having.()
+      |> order_by.()
+      |> select.()
+    end
     
     ## DONE
     { query_part, post_proc }
@@ -168,18 +171,17 @@ defmodule Ecto.Adapters.Riak.Search do
         search_docs = elem(search_result, 1)
        
         resolved =
-          Enum.map(search_docs,
-                   fn(x)->
-                       case parse_search_result(x) do
-                         { _, json } ->
-                           Object.resolve_json(json)
-                           |> Object.statebox_to_entity
-                         _ ->
-                           nil
-                       end
-                   end)
+          Enum.map(search_docs, fn x ->
+            case parse_search_result(x) do
+              { _, json } ->
+                Object.resolve_json(json)
+                |> Object.statebox_to_entity
+              _ ->
+                nil
+            end
+          end)
           |> Enum.filter(&(nil != &1))
-          |> Enum.uniq(fn(x)-> x.primary_key end)  ## just drop for now
+          |> Enum.uniq(fn x -> x.primary_key end)  ## just drop for now
         
         ## (Obsolete once CRDTs are available)
         ## Reduce search_docs into a HashDict mapping
@@ -227,30 +229,28 @@ defmodule Ecto.Adapters.Riak.Search do
     riak_key = Dict.get(doc, @yz_riak_key)
     proplist =
       ## Filter out YZ keys
-      Enum.filter(doc, fn(x)-> ! (x in @yz_meta_keys) end)
+      Enum.filter(doc, fn x -> ! (x in @yz_meta_keys) end)
     
       ## Riak Search returns list values as multiple key-value tuples.
       ## Any duplicate keys should have their values put into a list
       ## ie: { "a":[1,2] } gets returned as: [{"a",1}, {"a",2}]
-      |> Enum.reduce(HashDict.new(),
-                     fn({k,v}, acc)->
-                         fun = fn(existing)->
-                                   if HashDict.has_key?(acc, k) do
-                                     if is_list(existing) do
-                                       [v | existing]
-                                     else
-                                       [v, existing]
-                                     end
-                                   else
-                                     v
-                                   end
-                               end
-                         HashDict.update(acc, k, v, fun)
-                     end)
+      |> Enum.reduce(HashDict.new(), fn { k, v }, acc ->
+           HashDict.update(acc, k, v, fn existing ->
+             if HashDict.has_key?(acc, k) do
+               if is_list(existing) do
+                 [v | existing]
+               else
+                 [v, existing]
+               end
+             else
+               v
+             end
+           end)
+         end)
       
       ## Transform to list and filter out nil values
       |> HashDict.to_list
-      |> Enum.filter(fn({_,v})-> v != nil end)
+      |> Enum.filter(fn { _, v } -> v != nil end)
 
     ## Return
     case Dict.get(proplist, "ectomodel_s") do
@@ -285,7 +285,7 @@ defmodule Ecto.Adapters.Riak.Search do
   defp group_by([]) do
     ## Empty group_by query should simply return 
     ## the entire list of entities
-    fn(entities) -> entities end
+    fn entities -> entities end
   end
 
   defp group_by(group_bys) do
@@ -303,22 +303,21 @@ defmodule Ecto.Adapters.Riak.Search do
     ## 
     ## An entity should only appear once in this dict
     
-    fields = Enum.map(group_bys,
-                      fn(expr)->
-                          Enum.map(expr.expr, fn({_, field})-> field end)
-                      end)
-    fields = List.flatten(fields)
+    fields = Enum.map(group_bys, fn expr ->
+      Enum.map(expr.expr, fn { _, field } -> field end)
+    end)
+      |> List.flatten
 
-    fn(entities)->
-        fun = fn(entity, dict)->
-                  ## Get values using fields to create key tuple
-                  entity_kw = RiakUtil.entity_keyword(entity)
-                  values = Enum.map(fields, &(entity_kw[&1]))
-                  key = list_to_tuple(values)
-                  HashDict.update(dict, key, [entity], fn(e)-> [entity | e] end)
-              end
-        Enum.reduce(entities, HashDict.new, fun)
-        |> HashDict.values
+    fn entities ->
+        fun = fn entity, dict ->
+          ## Get values using fields to create key tuple
+          entity_kw = RiakUtil.entity_keyword(entity)
+          values = Enum.map(fields, &(entity_kw[&1]))
+          key = list_to_tuple(values)
+          HashDict.update(dict, key, [entity], fn(e)-> [entity | e] end)
+        end
+        
+        Enum.reduce(entities, HashDict.new, fun) |> HashDict.values
     end
   end
 
@@ -334,10 +333,9 @@ defmodule Ecto.Adapters.Riak.Search do
     ## constructs the "sort" option to Yokozuna
     ## docs -- http://wiki.apache.org/solr/CommonQueryParameters#sort
     querystring =
-      Enum.map_join(order_bys, ", ", 
-                    fn(expr)->
-                        Enum.map_join(expr.expr, ", ", &order_by_expr(&1, sources))
-                    end)
+      Enum.map_join(order_bys, ", ", fn expr ->
+        Enum.map_join(expr.expr, ", ", &order_by_expr(&1, sources))
+      end)
     { :sort, querystring }
   end
 
@@ -353,14 +351,19 @@ defmodule Ecto.Adapters.Riak.Search do
   end
 
   @spec limit(integer) :: search_option
+
   defp limit(nil), do: nil
+
   defp limit(num) when is_integer(num) do
-    {:rows, num}
+    { :rows, num }
   end 
 
+  @spec offset(integer) :: search_option
+
   defp offset(nil), do: nil
+
   defp offset(num) when is_integer(num) do
-    {:start, num}
+    { :start, num }
   end
 
   ## ----------------------------------------------------------------------
@@ -375,7 +378,7 @@ defmodule Ecto.Adapters.Riak.Search do
                 [],
                 fn({ queryable, entity, model }, acc)->
                     name = unique_name(acc, String.first(queryable), 0)
-                    [{{queryable,name}, entity, model} | acc]
+                    [{ { queryable, name }, entity, model } | acc]
                 end)
     |> Enum.reverse
     |> list_to_tuple
@@ -403,7 +406,7 @@ defmodule Ecto.Adapters.Riak.Search do
   def search_index_reload_all(socket) do
     models = riak_models()
     Enum.map(models, fn(model)->
-      {model, search_index_reload(socket, model)}
+      { model, search_index_reload(socket, model) }
     end)
   end
 
@@ -428,10 +431,10 @@ defmodule Ecto.Adapters.Riak.Search do
   defp riak_models() do
     ## returns all models 
     :code.all_loaded
-      |> Enum.filter(fn({ mod, _ })->
-                         function_exported?(mod, :__model__, 1)
-                     end)
-      |> Enum.map(fn({ mod, _ })-> mod end)
+      |> Enum.filter(fn { mod, _ } ->
+           function_exported?(mod, :__model__, 1)
+         end)
+      |> Enum.map(fn { mod, _ } -> mod end)
   end
   
 end
