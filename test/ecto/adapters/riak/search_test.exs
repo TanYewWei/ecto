@@ -248,13 +248,25 @@ defmodule Ecto.Adapters.Riak.SearchTest do
     [p0, p1, p2, p3, p4] = posts = mock_posts()
 
     { _, post_proc } = order_by(base, [p], p.title)
-      |> normalize |> Search.query
-    expected = posts
+      |> select([p], p.id) |> normalize |> Search.query
+    expected = Enum.map(posts, &(&1.id))
     assert expected == post_proc.(posts)
 
     { _, post_proc } = order_by(base, [p], [desc: p.title])
-      |> normalize |> Search.query
-    expected = Enum.reverse(posts)
+      |> select([p], p.id) |> normalize |> Search.query
+    expected = [p3.id, p4.id, p1.id, p2.id, p0.id]
+    assert expected == post_proc.(posts)
+
+    ## Multiple order_bys
+    ## order should be:
+    ## - p3 => count = 2, title = "test title 2"
+    ## - p2 => count = 2, title = "test title 1"
+    ## - p4 => count = 3, title = "test title 2"
+    ## - p0 => count = 4, title = "test title"
+    ## - p1 => count = 6, title = "test title 1"
+    { _, post_proc } = order_by(base, [p], [asc: p.count, desc: p.title])
+      |> select([p], p.id) |> normalize |> Search.query
+    expected = [p3.id, p2.id, p4.id, p0.id, p1.id]
     assert expected == post_proc.(posts)
   end
   

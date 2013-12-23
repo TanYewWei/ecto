@@ -37,21 +37,22 @@ defmodule Ecto.Adapters.Riak.SearchOrderBy do
         field_type = entity.__entity__(:field_type, field)
 
         ## return function
-        fn x, y ->
-             case field_type do
-               :datetime ->
-                 compare_datetime(direction, x, y)
-               :interval ->
-                 compare_interval(direction, x, y)
-               _ ->
-                 compare_simple(direction, x, y)
-             end
+        fn e0, e1 ->
+           v0 = apply(e0, field, [])
+           v1 = apply(e1, field, [])
+           ##IO.puts("compare: #{inspect v0}, #{inspect v1}, #{field_type}")
+           case field_type do
+             :datetime ->
+               compare_datetime(direction, v0, v1)
+             :interval ->
+               compare_interval(direction, v0, v1)
+             _ ->
+               compare_simple(direction, v0, v1)
+           end
         end
       end)
     end)
       |> List.flatten
-
-    IO.puts("comparisons: #{inspect comparisons}")
 
     ## Construct function which performs the operation through funs,
     ## and returns either true or false to give the entities the
@@ -59,7 +60,7 @@ defmodule Ecto.Adapters.Riak.SearchOrderBy do
     pred = fn x, y ->
       { _, res } = Enumerable.reduce(comparisons, { :cont, false }, fn fun, _ ->
         case fun.(x, y) do
-          :eq ->
+          :eq ->            
             { :cont, :eq }
           :lt ->
             { :halt, :lt }
@@ -70,6 +71,7 @@ defmodule Ecto.Adapters.Riak.SearchOrderBy do
 
       case res do
         :lt -> true
+        :eq -> true
         _   -> false
       end
     end

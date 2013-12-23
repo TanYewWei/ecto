@@ -38,7 +38,7 @@ defmodule Ecto.Adapters.Riak.Search do
   ## riak search result
   ## see -- https://github.com/basho/riak-erlang-client/blob/master/include/riakc.hrl
   @type search_doc    :: { index :: binary,
-                           attr  :: [{binary, binary}] }
+                           attr  :: [{ binary, binary }] }
   @type search_result :: { :search_result,
                            docs :: [search_doc],
                            max_score :: integer,
