@@ -1,5 +1,4 @@
 defmodule Ecto.Adapters.Riak.SearchWhere  do
-  alias Ecto.Adapters.Riak.Util, as: RiakUtil
   alias Ecto.Adapters.Riak.Object, as: RiakObj
   alias Ecto.Query.QueryExpr
   alias Ecto.Query.Util

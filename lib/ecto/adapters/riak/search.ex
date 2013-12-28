@@ -170,45 +170,39 @@ defmodule Ecto.Adapters.Riak.Search do
         ## get search docs from erlang record representation
         search_docs = elem(search_result, 1)
        
-        resolved =
-          Enum.map(search_docs, fn x ->
-            case parse_search_result(x) do
-              { _, json } ->
-                Object.resolve_json(json)
-                |> Object.statebox_to_entity
-              _ ->
-                nil
-            end
-          end)
-          |> Enum.filter(&(nil != &1))
-          |> Enum.uniq(fn x -> x.primary_key end)  ## just drop for now
+        # resolved =
+        #   Enum.map(search_docs, fn x ->
+        #     case parse_search_result(x) do
+        #       { _, json } ->
+        #         Object.resolve_json(json)
+        #         |> Object.statebox_to_entity
+        #       _ ->
+        #         nil
+        #     end
+        #   end)
+        #   |> Enum.filter(&(nil != &1))
+        #   |> Enum.uniq(fn x -> x.primary_key end)  ## just drop for now
         
-        ## (Obsolete once CRDTs are available)
         ## Reduce search_docs into a HashDict mapping
         ## the riak object key to a list of stateboxes which
         ## can be used for sibling resolution
-        # {_, doc_dict} = 
-        #   Enum.reduce(search_docs,
-        #               HashDict.new,
-        #               fn(x, acc)-> 
-        #                   case parse_search_result(x) do
-        #                     { key, json } ->
-        #                       box = Object.resolve_json(json)
-        #                       fun = &([box | &1])
-        #                       HashDict.update(acc, key, [box], fun)
-        #                     _ ->
-        #                       acc
-        #                   end
-        #               end)
+        doc_dict = Enum.reduce(search_docs, HashDict.new, fn x, acc ->
+            case parse_search_result(x) do
+              { key, json } ->
+                box = Object.resolve_json(json)
+                fun = &([box | &1])
+                HashDict.update(acc, key, [box], fun)
+              _ ->
+                acc
+            end
+          end)
 
         ## Use doc_dict to resolve any duplicates (riak siblings).
         ## The resulting list is a list of entity objects
-        # resolved =
-        #   Enum.map(HashDict.to_list(doc_dict),
-        #            fn({ _, box_list })->
-        #                :statebox_orddict.from_values(box_list)
-        #                |> Object.statebox_to_entity
-        #            end)
+        resolved = Enum.map(HashDict.to_list(doc_dict), fn { _, box_list } ->
+          :statebox_orddict.from_values(box_list)
+          |> Object.statebox_to_entity
+        end)
 
         ## Perform any migrations if needed
         migrated = Enum.map(resolved, &Migration.migrate/1)
@@ -322,33 +316,8 @@ defmodule Ecto.Adapters.Riak.Search do
   end
 
   ## ----------------------------------------------------------------------
-  ## ORDER BY, LIMIT, and OFFSET
-  ## ----------------------------------------------------------------------
-
-  @spec order_by(expr_order_by, [source]) :: { :sort, binary }
-  
-  defp order_by([]), do: nil
-
-  defp order_by(order_bys, sources) do
-    ## constructs the "sort" option to Yokozuna
-    ## docs -- http://wiki.apache.org/solr/CommonQueryParameters#sort
-    querystring =
-      Enum.map_join(order_bys, ", ", fn expr ->
-        Enum.map_join(expr.expr, ", ", &order_by_expr(&1, sources))
-      end)
-    { :sort, querystring }
-  end
-
-  defp order_by_expr({ direction, var, field }, sources) do
-    source = Util.find_source(sources, var)
-    entity = Util.entity(source)
-    field_type = entity.__entity__(:field_type, field)
-    str = RiakUtil.yz_key("#{field}", field_type)
-    str <> case direction do
-             :asc  -> " asc"
-             :desc -> " desc"
-           end
-  end
+  ## LIMIT, and OFFSET
+  ## ---------------------------------------------------------------------- 
 
   @spec limit(integer) :: search_option
 
@@ -374,20 +343,18 @@ defmodule Ecto.Adapters.Riak.Search do
   def create_names(query) do
     ## Creates unique variable names for a query
     sources = query.sources |> tuple_to_list
-    Enum.reduce(sources,
-                [],
-                fn({ queryable, entity, model }, acc)->
-                    name = unique_name(acc, String.first(queryable), 0)
-                    [{ { queryable, name }, entity, model } | acc]
-                end)
-    |> Enum.reverse
-    |> list_to_tuple
+    Enum.reduce(sources, [], fn { queryable, entity, model }, acc ->
+      name = unique_name(acc, String.first(queryable), 0)
+      [{ { queryable, name }, entity, model } | acc]
+    end)
+      |> Enum.reverse
+      |> list_to_tuple
   end
 
   @spec unique_name(list, binary, integer) :: binary
   defp unique_name(names, name, counter) do
     counted_name = name <> integer_to_binary(counter)
-    if Enum.any?(names, fn({ { _, n }, _, _ })-> n == counted_name end) do
+    if Enum.any?(names, fn { { _, n }, _, _ } -> n == counted_name end) do
       unique_name(names, name, counter+1)
     else
       counted_name
@@ -405,7 +372,7 @@ defmodule Ecto.Adapters.Riak.Search do
   """
   def search_index_reload_all(socket) do
     models = riak_models()
-    Enum.map(models, fn(model)->
+    Enum.map(models, fn model ->
       { model, search_index_reload(socket, model) }
     end)
   end

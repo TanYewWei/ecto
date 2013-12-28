@@ -76,7 +76,7 @@ defmodule Ecto.Adapters.Riak.Object do
   end
 
   defp statebox_timestamp_key(key) do
-    "_sb_ts_#{key}"
+    "_sb_ts_#{key}_l"
   end
 
   def build_riak_context(entity) do
