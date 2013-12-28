@@ -295,6 +295,14 @@ defmodule Ecto.Adapters.Postgres.SQLTest do
 
     query = from(Model) |> group_by([r], r) |> select([r], r.x) |> normalize
     assert SQL.select(query) == "SELECT m0.\"x\"\nFROM \"model\" AS m0\nGROUP BY m0.\"id\", m0.\"x\", m0.\"y\""
+
+    query = from(Model) |> group_by([r], [r, r.x]) |> select([r], r.x) |> normalize
+    assert SQL.select(query) == "SELECT m0.\"x\"\nFROM \"model\" AS m0\nGROUP BY m0.\"id\", m0.\"x\", m0.\"y\", m0.\"x\""
+  end
+
+  test "sigils" do
+    query = from(Model) |> select([], %s"abc" in %w(abc def)) |> normalize
+    assert SQL.select(query) == "SELECT 'abc' = ANY (ARRAY['abc', 'def'])\nFROM \"model\" AS m0"
   end
 
   defrecord Rec, [:x]
