@@ -18,6 +18,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.V0 do
     field :interval, :interval
     field :virtual,  :virtual
     field :hello,    :virtual
+    field :riak_version, :integer, default: 0
 
     RiakValidate.validate(float: present,
                           also: validate_some_thing)
@@ -27,13 +28,14 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.V0 do
   end
 
   def version(), do: 0
+  
   def migrate_from_previous(entity) do
     RiakUtil.entity_keyword(entity) |> __MODULE__.new
   end
   
   def migrate_from_newer(entity) do
     attr = RiakUtil.entity_keyword(entity)
-    attr = Keyword.put(attr, :version, version())
+    ##attr = Keyword.put(attr, :version, version())
     
     ## Restore :integer and :float fields
     attr = Keyword.put(attr, :integer, entity.number)
@@ -60,13 +62,13 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Ver1 do
     field :datetime, :datetime
     field :interval, :interval
     field :virtual,  :virtual
+    field :riak_version, :integer, default: 1
   end
 
   def version(), do: 1
     
   def migrate_from_previous(entity) do
     attr = RiakUtil.entity_keyword(entity)
-    attr = Keyword.put(attr, :version, version())
 
     ## Rename :integer field
     attr = Keyword.put(attr, :number, entity.integer)
@@ -89,9 +91,8 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Ver1 do
     __MODULE__.new(attr)
   end
   
-  def migrate_from_newer(entity) do ## version 3 to 2
+  def migrate_from_newer(entity) do ## version 2 to 1
     attr = RiakUtil.entity_keyword(entity)
-    attr = Keyword.put(attr, :version, version())
     
     ## Reverse :string list
     attr = Keyword.put(attr,
@@ -126,6 +127,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version2 do
     field :int,      :integer
     field :string,   { :list, :string } ## type change
     field :binary,   :string          ## type change
+    field :riak_version, :integer, default: 2
     ## dropped :datetime, :interval, and :virtual
   end
 
@@ -133,7 +135,6 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version2 do
     
   def migrate_from_previous(entity) do
     attr = RiakUtil.entity_keyword(entity)
-    attr = Keyword.put(attr, :version, version())
 
     ## change :string to be a list of strings
     attr = Keyword.put(attr, :string, [entity.string])
@@ -205,7 +206,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
     e0 = mock_entity_ver0()
     Migration.set_current_version(e0, 1)
     e2 = Migration.migrate(e0)
-    assert e2.version == 1
+    assert e2.riak_version == 1
     assert is_integer(e2.number)
     assert is_integer(e2.int)
     assert is_binary(e2.string)
@@ -218,7 +219,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
     e0 = mock_entity_ver0()
     Migration.set_current_version(e0, 2)
     e3 = Migration.migrate(e0)
-    assert e3.version == 2
+    assert e3.riak_version == 2
     assert is_integer(e3.number)
     assert is_integer(e3.int)
     assert e3.binary == :base64.encode(e0.binary)
@@ -250,42 +251,41 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
     assert e1 == e0
 
     ## Downward Migrations disabled by default
-    e3 = mock_entity_ver2()
-    Migration.set_current_version(e3, 1)
-    e2 = Migration.migrate(e3)
-    assert e2 == e3
+    e2 = mock_entity_ver2()
+    Migration.set_current_version(e2, 2)
+    e1 = Migration.migrate(e2)
+    assert e1 == e2
 
     ## Migration to same version
     Migration.migration_down_enable()
-    e3 = mock_entity_ver2()
-    Migration.set_current_version(e3, 2)
-    assert e3 == Migration.migrate(e3)
+    Migration.set_current_version(e2, 2)
+    assert e2 == Migration.migrate(e2)
 
     ## Single Version Downgrade
-    e3 = mock_entity_ver2()
-    Migration.set_current_version(e3, 1)
-    e2 = Migration.migrate(e3)
-    assert e2.version == 1
-    assert is_integer(e2.number)
-    assert is_integer(e2.int)
-    assert is_binary(e2.string)
-    assert e2.binary == e0.binary
-    assert is_record(e2.datetime, Ecto.DateTime)
-    assert nil == e2.interval
-    assert { :some, "random", 'tuple' } == e2.virtual
-    
-    ## Multiple Version Downgrade
-    e3 = mock_entity_ver2()
-    Migration.set_current_version(e3, 0)
-    e1 = Migration.migrate(e3)
-    assert e1.version == 0
-    assert is_integer(e1.integer)
-    assert is_float(e1.float)
+    e2 = mock_entity_ver2()
+    Migration.set_current_version(e2, 1)
+    e1 = Migration.migrate(e2)
+    assert e1.riak_version == 1
+    assert is_integer(e1.number)
+    assert is_integer(e1.int)
     assert is_binary(e1.string)
-    assert e3.binary |> :base64.decode == e1.binary
+    assert e1.binary == e0.binary
     assert is_record(e1.datetime, Ecto.DateTime)
     assert nil == e1.interval
-    assert nil == e1.virtual  ## virtual values not persisted over migration
+    assert { :some, "random", 'tuple' } == e1.virtual
+    
+    ## Multiple Version Downgrade
+    e2 = mock_entity_ver2()
+    Migration.set_current_version(e2, 0)
+    e0 = Migration.migrate(e2)
+    assert e0.riak_version == 0
+    assert is_integer(e0.integer)
+    assert is_float(e0.float)
+    assert is_binary(e0.string)
+    assert e2.binary |> :base64.decode == e0.binary
+    assert is_record(e0.datetime, Ecto.DateTime)
+    assert nil == e0.interval
+    assert nil == e0.virtual  ## virtual values not persisted over migration
   end
 
   ## ------------------------------------------------------------
@@ -309,8 +309,8 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
                string: ["hello"],
                binary: "AAEC",
                datetime: Ecto.DateTime[year: 2000],
-               interval: Ecto.Interval[day: 1],               
-               version: 3)
+               interval: Ecto.Interval[day: 1],
+               riak_version: 2)
   end
 
 end

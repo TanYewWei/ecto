@@ -2,6 +2,7 @@ defmodule Ecto.Adapters.Riak.Object do
   alias :riakc_obj, as: RiakObject
   alias Ecto.Adapters.Riak.Datetime
   alias Ecto.Adapters.Riak.JSON
+  alias Ecto.Adapters.Riak.RequiredFieldUndefinedError
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
 
   @type statebox    :: :statebox.statebox
@@ -19,6 +20,8 @@ defmodule Ecto.Adapters.Riak.Object do
   @spec entity_to_object(entity) :: object
   
   def entity_to_object(entity) do
+    validate_entity(entity) ## raise error if validation fails
+
     context = entity.riak_context
     ts = timestamp
 
@@ -222,6 +225,27 @@ defmodule Ecto.Adapters.Riak.Object do
       name |> RiakUtil.to_atom
     else
       (name_str <> suffix) |> RiakUtil.to_atom
+    end
+  end
+
+  ## ----------------------------------------------------------------------
+  ## Validation
+  ## ----------------------------------------------------------------------
+
+  defp validate_entity(entity) do
+    ## checks that all fields needed for Riak 
+    ## migrations are defined
+    cond do
+      ! function_exported?(entity, :riak_version, 0) ->
+        raise RequiredFieldUndefinedError,
+          field: :riak_version,
+          entity: entity
+      ! function_exported?(entity, :riak_context, 0) ->
+        raise RequiredFieldUndefinedError,
+          field: :riak_context,
+          entity: entity
+      true ->
+        true
     end
   end
 

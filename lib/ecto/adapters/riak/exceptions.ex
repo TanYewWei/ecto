@@ -4,6 +4,7 @@ defexception Ecto.Adapters.Riak.MigrationModulesException,
   Exception raised when there was an error in loading
   all required modules to migrate an entity to a specified version
   """
+  
   def message(e) do
     modules = Enum.map(e.modules, &("* #{&1}\n"))
 
@@ -28,6 +29,12 @@ defexception Ecto.Adapters.Riak.RequiredFieldUndefinedError,
   defined for use with Migrations and Conflict resolution.
   This exception is raised if any of those fields are not set.
   """
+  
   def message(e) do
+    """
+    Required Riak Adapter field `#{e.field}` was not defined for entity:
+
+    #{inspect e.entity}
+    """
   end
 end

@@ -132,7 +132,7 @@ defmodule Ecto.Adapters.Riak.Migration do
 
   @spec migrate(entity) :: entity
   def migrate(entity) do
-    entity_version = entity.version
+    entity_version = entity.riak_version
     target_version = current_version(entity)
     
     ## Make upgrades implicit 
@@ -168,7 +168,8 @@ defmodule Ecto.Adapters.Riak.Migration do
     ## Get relevant migration modules in ascending order
     modules = migration_modules(entity, version)
     List.foldl(modules, entity, fn module, ent ->
-      module.migrate_from_previous(ent)
+      ent.riak_version(module.version)
+      |> module.migrate_from_previous
     end)
   end
 
@@ -177,14 +178,15 @@ defmodule Ecto.Adapters.Riak.Migration do
     ## Get relevant migration modules in descending order
     modules = migration_modules(entity, version)
     List.foldl(modules, entity, fn module, ent ->
-       module.migrate_from_newer(ent)
+       ent.riak_version(module.version)
+       |> module.migrate_from_newer
     end)
   end
 
   @spec migration_modules(entity, integer) :: [module] | no_return
 
   defp migration_modules(entity, version) do
-    migration_modules_worker(entity, entity.version, version)
+    migration_modules_worker(entity, entity.riak_version, version)
   end
 
   @spec migration_modules_worker(entity, integer, integer) :: [module]
