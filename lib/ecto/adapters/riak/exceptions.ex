@@ -32,7 +32,7 @@ defexception Ecto.Adapters.Riak.RequiredFieldUndefinedError,
   
   def message(e) do
     """
-    Required Riak Adapter field `#{e.field}` was not defined for entity:
+    Required field `#{e.field}` was not defined for entity:
 
     #{inspect e.entity}
     """

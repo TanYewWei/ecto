@@ -158,7 +158,7 @@ defmodule Ecto.Adapters.Riak.Object do
 
     ## Construct statebox with straightforward ops,
     ## then modify with timestamped ops
-    box = :statebox.modify(1, ops, :statebox.new(0, fn() -> [] end))
+    box = :statebox.modify(1, ops, :statebox.new(0, fn -> [] end))
     :statebox.modify(timestamp, ts_ops, box)
   end
 
@@ -170,11 +170,11 @@ defmodule Ecto.Adapters.Riak.Object do
     ## Use module to get available fields 
     ## and create new entity    
     entity_fields = entity_module.__entity__(:field_names)
-    Enum.map(entity_fields, fn(x)->
-      case :orddict.find(x, values) do
+    Enum.map(entity_fields, fn field ->
+      case :orddict.find(field, values) do
         { :ok, value } ->
-          type = entity_module.__entity__(:field_type, x)
-          { x, ecto_value(value, type) }
+          type = entity_module.__entity__(:field_type, field)
+          { field, ecto_value(value, type) }
         _ ->
           nil
       end
@@ -182,6 +182,7 @@ defmodule Ecto.Adapters.Riak.Object do
       |> Enum.filter(&(nil != &1))
       |> model.new
       |> build_riak_context
+      |> validate_entity
   end
 
   defp ecto_value(nil, _), do: nil
@@ -200,13 +201,13 @@ defmodule Ecto.Adapters.Riak.Object do
         Datetime.parse_to_ecto_interval(val)
       :integer when is_binary(val) ->
         case Integer.parse(val) do
-          {i, _} -> i
-          _      -> nil
+          { i, _ } -> i
+          _        -> nil
         end
       :float when is_binary(val) ->
         case Float.parse(val) do
-          {f, _} -> f
-          _      -> nil
+          { f, _ } -> f
+          _        -> nil
         end
       _ ->
         val
@@ -231,23 +232,34 @@ defmodule Ecto.Adapters.Riak.Object do
   ## ----------------------------------------------------------------------
   ## Validation
   ## ----------------------------------------------------------------------
+  
+  defmacrop raise_required_field_error(field, entity) do
+    quote do
+      raise RequiredFieldUndefinedError,
+        field: unquote(field),
+        entity: unquote(entity)
+    end
+  end
 
   defp validate_entity(entity) do
     ## checks that all fields needed for Riak 
-    ## migrations are defined
+    ## migrations are defined    
+
     cond do
+      ! function_exported?(entity, :id, 0) ->
+        raise_required_field_error(:id, entity)
+      entity.id == nil || size(entity.id) == 0 ->
+        raise_required_field_error(:id, entity)
       ! function_exported?(entity, :riak_version, 0) ->
-        raise RequiredFieldUndefinedError,
-          field: :riak_version,
-          entity: entity
+        raise_required_field_error(:riak_version, entity)
+      ! is_integer(entity.riak_version) ->
+        raise_required_field_error(:riak_version, entity)
       ! function_exported?(entity, :riak_context, 0) ->
-        raise RequiredFieldUndefinedError,
-          field: :riak_context,
-          entity: entity
+        raise_required_field_error(:riak_context, entity)
       true ->
-        true
+        entity
     end
-  end
+  end  
 
   ## ----------------------------------------------------------------------
   ## Key and Value De/Serialization

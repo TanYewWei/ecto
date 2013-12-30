@@ -126,7 +126,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version2 do
     field :number,   :integer
     field :int,      :integer
     field :string,   { :list, :string } ## type change
-    field :binary,   :string          ## type change
+    field :binary,   :string           ## type change
     field :riak_version, :integer, default: 2
     ## dropped :datetime, :interval, and :virtual
   end

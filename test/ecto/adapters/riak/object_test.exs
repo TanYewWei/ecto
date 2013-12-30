@@ -7,7 +7,26 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
   alias Ecto.Adapters.Riak.Datetime
   alias Ecto.Adapters.Riak.JSON
   alias Ecto.Adapters.Riak.Object
+  alias Ecto.Adapters.Riak.RequiredFieldUndefinedError
   
+  test "model without riak_version field should raise error" do
+    defmodule BadModel do
+      use Ecto.RiakModel
+      
+      queryable "models" do
+        field :int, :integer
+      end
+
+      def version(), do: 0
+      def migrate_from_previous(x), do: x
+      def migrate_from_newer(x), do: x
+    end
+
+    entity = BadModel.new()
+    assert_raise RequiredFieldUndefinedError,
+      fn -> Object.entity_to_object(entity) end
+  end
+
   test "create_primary_key" do
     p0 = mock_post()
     p0 = p0.primary_key(nil)
@@ -61,6 +80,6 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
              rating: 5,
              posted: Datetime.now_ecto_datetime,
              temp: "test temp")
-  end
+  end  
   
 end

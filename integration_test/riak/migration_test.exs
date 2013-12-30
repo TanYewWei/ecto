@@ -41,7 +41,7 @@ defmodule Ecto.Integration.Riak.MigrationTest do
   end
 
   defp mock_model_ver2() do
-  end
+  end  
 
   defmodule Model do
     use Ecto.RiakModel
