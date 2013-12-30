@@ -72,7 +72,7 @@ defmodule Ecto.Adapters.Riak.Object do
       values ->
         resolve_siblings(values)
     end
-      |> build_riak_context
+    ##|> build_riak_context
   end
 
   defp statebox_timestamp_key(key) do
@@ -105,25 +105,27 @@ defmodule Ecto.Adapters.Riak.Object do
   end 
 
   @spec resolve_value(binary) :: entity
-  defp resolve_value(value) do
-    resolve(value) |> statebox_to_entity
+  def resolve_value(value) do
+    resolve_to_statebox(value) |> statebox_to_entity
   end
 
   @spec resolve_siblings([binary | json]) :: entity
   def resolve_siblings(values) do
-    stateboxes = Enum.map(values, &resolve/1)
+    stateboxes = Enum.map(values, &resolve_to_statebox/1)
     statebox = :statebox_orddict.from_values(stateboxes)
     statebox = :statebox.truncate(0, statebox)
     statebox_to_entity(statebox)
   end
 
-  @spec resolve(binary | json) :: statebox
+  @spec resolve_to_statebox(binary | json) :: statebox
 
-  defp resolve(nil), do: nil
+  def resolve_to_statebox(nil), do: nil
 
-  defp resolve(bin) when is_binary(bin), do: JSON.decode(bin) |> resolve
+  def resolve_to_statebox(bin) when is_binary(bin) do
+    JSON.decode(bin) |> resolve_to_statebox
+  end
 
-  defp resolve({ inner } = json) do
+  def resolve_to_statebox({ inner } = json) do
     { ops,        ## timestamp-independent ops
       timestamp,  ## timestamp to do :statebox.modify/3 with
       ts_ops      ## timestamp-dependent ops
@@ -176,6 +178,7 @@ defmodule Ecto.Adapters.Riak.Object do
     end)
       |> Enum.filter(&(nil != &1))
       |> model.new
+      |> build_riak_context
   end
 
   defp ecto_value(nil, _), do: nil

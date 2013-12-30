@@ -1,15 +1,12 @@
 defmodule Ecto.Adapters.Riak do
-  @moduledoc """
-  """
-
   @behaviour Ecto.Adapter
 
   @bucket_name  "50"
   @bucket_type  "map"
-  @datatype_update_options [:create, :return_body]
-  @put_options [:return_body]
+  @put_options  [:return_body]
     
   alias Ecto.Adapters.Riak.AdapterStartError
+  alias Ecto.Adapters.Riak.ETS
   alias Ecto.Adapters.Riak.Object, as: RiakObj
   alias Ecto.Adapters.Riak.Search
   alias Ecto.Adapters.Riak.Supervisor
@@ -25,7 +22,9 @@ defmodule Ecto.Adapters.Riak do
   @type primary_key :: binary
   @type repo        :: Ecto.Repo.t
 
+  ## ----------------------------------------------------------------------
   ## Adapter API
+  ## ----------------------------------------------------------------------
 
   defmacro __using__(_opts) do
     quote do
@@ -61,14 +60,26 @@ defmodule Ecto.Adapters.Riak do
           end
         end)
 
-        ## Setup search indexes for all models
-        :timer.sleep(500)
-        failed_index_res = use_worker(repo, &Search.search_index_reload_all(&1))
-          |> Enum.filter(fn { _, res } -> res != :ok end)
-        if length(failed_index_res) > 0 do
-          raise AdapterStartError,
-            message: "Failed to create search indexs for required models: #{inspect failed_index_res}"
+        ## Setup search indexes for all models.
+        ## This will require us to wait until pooler
+        ## is ready to accept connections.
+
+        setup_search_indexes = fn ->
+          failures = use_worker(repo, &Search.search_index_reload_all(&1))
+            |> Enum.filter(fn { _, res } -> res != :ok end)
+          if length(failures) > 0 do
+            raise AdapterStartError,
+              message: "Failed to create search indexes for required models: #{inspect failures}"
+          else
+            IO.puts("Search indexes successfully set up")
+            :ok
+          end
         end
+
+        wait_until(setup_search_indexes)
+
+        ## setup ETS table for migration state management
+        ETS.init()
         
         ## return supervisor pid
         { :ok, supervisor }
@@ -245,8 +256,8 @@ defmodule Ecto.Adapters.Riak do
     end
     
     use_worker(repo, fun)
-  end  
-
+  end
+  
   ## ----------------------------------------------------------------------
   ## Worker Pools
   ## ----------------------------------------------------------------------
@@ -265,6 +276,36 @@ defmodule Ecto.Adapters.Riak do
       rsn ->
         { :error, rsn }
     end
+  end
+  
+  ## ----------------------------------------------------------------------
+  ## Util
+  ## ----------------------------------------------------------------------
+
+  defp wait_until(fun), do: wait_until(fun, 5, 500)
+
+  defp wait_until(fun, retry, delay) when retry > 0 do
+    res = try do
+            fun.()
+          rescue
+            x in [AdapterStartError] -> x
+          catch
+            _,rsn -> rsn
+          end
+    if res != :ok do
+      if retry == 1 do
+        raise res
+      else
+        :timer.sleep(delay)
+        wait_until(fun, retry-1, delay)
+      end
+    else
+      res
+    end
+  end
+
+  defp wait_until(_, _, _) do
+    { :error, :timed_out }
   end
   
 end

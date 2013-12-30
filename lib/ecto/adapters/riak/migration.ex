@@ -167,18 +167,18 @@ defmodule Ecto.Adapters.Riak.Migration do
   defp migrate_up(entity, version) do
     ## Get relevant migration modules in ascending order
     modules = migration_modules(entity, version)
-    List.foldl(modules,
-               entity,
-               fn(module, ent)-> module.migrate_from_previous(ent) end)
+    List.foldl(modules, entity, fn module, ent ->
+      module.migrate_from_previous(ent)
+    end)
   end
 
   @spec migrate_down(entity, integer) :: entity
   defp migrate_down(entity, version) do
     ## Get relevant migration modules in descending order
     modules = migration_modules(entity, version)
-    List.foldl(modules,
-               entity,
-               fn(module, ent)-> module.migrate_from_newer(ent) end)
+    List.foldl(modules, entity, fn module, ent ->
+       module.migrate_from_newer(ent)
+    end)
   end
 
   @spec migration_modules(entity, integer) :: [module] | no_return
@@ -197,32 +197,32 @@ defmodule Ecto.Adapters.Riak.Migration do
     ## Upgrade
     prefix = entity_prefix(entity.model)
     modules = :code.all_loaded
-      |> Enum.filter(fn({ mod, _ })->
+      |> Enum.filter(fn { mod, _ } ->
                          is_migration_module?(mod)
                          && prefix == entity_prefix(mod)
                          && mod.version <= target
                          && mod.version > current
                      end)
-      |> Enum.map(fn({ mod, _ })-> mod end)
+      |> Enum.map(fn { mod, _ } -> mod end)
 
     ## Check for duplicates, raising error if any exist
     migration_modules_deduplicate!(modules, entity, target)
     
     ## Sort in ascending order
-    Enum.sort(modules, fn(m0, m1)-> m0.version < m1.version end)
+    Enum.sort(modules, fn m0, m1 -> m0.version < m1.version end)
   end
 
   defp migration_modules_worker(entity, current, target) when current > target do
     ## Downgrade
     prefix = entity_prefix(entity.model)
     modules = :code.all_loaded
-      |> Enum.filter(fn({ mod, _ })->
+      |> Enum.filter(fn { mod, _ } ->
                          is_migration_module?(mod)
                          && prefix == entity_prefix(mod)
                          && mod.version >= target
                          && mod.version < current
                      end)
-      |> Enum.map(fn({ mod, _ })-> mod end)
+      |> Enum.map(fn { mod, _ } -> mod end)
 
     ## Check for duplicates, raising error if any exist
     migration_modules_deduplicate!(modules, entity, target)

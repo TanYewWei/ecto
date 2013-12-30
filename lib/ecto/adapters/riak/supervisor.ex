@@ -46,12 +46,12 @@ defmodule Ecto.Adapters.Riak.Supervisor do
     end
   end
 
-  def handle_call({:check_interval, interval}, _, state) do
-    {:reply, :ok, state.interval(interval)}
+  def handle_call({ :check_interval, interval }, _, state) do
+    { :reply, :ok, state.interval(interval) }
   end
 
-  def handle_info({:check_schema}, _, state) do
-    {:noreply, check_schema(state)}
+  def handle_info({ :check_schema }, _, state) do
+    { :noreply, check_schema(state) }
   end
   
   @spec current_schema(repo) :: {:ok, schema}

@@ -106,6 +106,43 @@ defmodule Ecto.Integration.Riak.Case do
   end
 end
 
+defmodule Ecto.Integration.Riak.Util do  
+  defmacro wait_assert(clauses) do
+    ## Yokozuna can take some time to index data (1-2 seconds)
+    ## The wait_until function retries an operation multiple 
+    ## times to take into account this delay
+    quote do
+      unquote(__MODULE__).wait_until(fn()-> assert unquote(clauses) end)
+    end    
+  end
+  
+  @type wait_until_fun :: (() -> ExUnit.ExpectationError.t | any)
+  @type msec :: non_neg_integer
+  @spec wait_until(wait_until_fun, msec, msec) :: any
+
+  def wait_until(fun) do
+    wait_until(fun, 10, 800)
+  end
+
+  def wait_until(fun, retry, delay) when retry > 0 do
+    res = try do
+            fun.()
+          catch
+            _,rsn -> rsn
+          end
+    if is_exception(res) do
+      if retry == 1 do
+        raise res
+      else
+        :timer.sleep(delay)
+        wait_until(fun, retry-1, delay)
+      end
+    else
+      res
+    end
+  end
+end
+
 ## ----------------------------------------------------------------------
 ## Setup
 ## ----------------------------------------------------------------------
@@ -117,10 +154,10 @@ custom_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Custom)
 buckets = [ posts_bucket, comments_bucket, permalinks_bucket, custom_bucket ]
 
 { :ok, socket } = RiakSocket.start_link('127.0.0.1', 8000)
-Enum.map(buckets, fn(bucket)->
+Enum.map(buckets, fn bucket ->
   :ok = RiakSocket.reset_bucket(socket, bucket)
   { :ok, keys } = RiakSocket.list_keys(socket, bucket)
-  Enum.map(keys, fn(key)->
+  Enum.map(keys, fn key ->
     :ok == RiakSocket.delete(socket, bucket, key)
   end)
 end)

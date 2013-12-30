@@ -126,16 +126,15 @@ defmodule Ecto.Adapters.Riak.Search do
     join(query) 
 
     ## Build Query Part
-    where    = SearchWhere.query(query.wheres, sources)    
-    ##order_by = order_by(query.order_bys, sources)
+    where    = SearchWhere.query(query.wheres, sources)
     limit    = limit(query.limit)
     offset   = offset(query.offset)
     
     ## querystring defaults to all results
-    querystring = Enum.join([where])
+    querystring = Enum.join([ where ])
     querystring = if querystring == "", do: "*:*", else: querystring 
     
-    options = List.flatten([limit, offset])
+    options = List.flatten([ limit, offset ])
       |> Enum.filter(&(nil != &1))
     query_part = { search_index, bucket, querystring, options }
 
@@ -144,7 +143,7 @@ defmodule Ecto.Adapters.Riak.Search do
     having   = SearchHaving.post_proc(query.havings)
     order_by = SearchOrderBy.post_proc(query.order_bys, sources)
     select   = SearchSelect.post_proc(query.select)
-    post_proc = fn entities ->                    
+    post_proc = fn entities ->
       group_by.(entities)
       |> having.()
       |> order_by.()
@@ -161,27 +160,13 @@ defmodule Ecto.Adapters.Riak.Search do
   """
   @spec execute(pid, query_tuple, post_proc_fun) :: [entity]
   def execute(worker, query_tuple, post_proc_fun) do
-    { search_index, bucket, querystring, opts } = query_tuple
+    { search_index, _, querystring, opts } = query_tuple
     case RiakSocket.search(worker, search_index, querystring, opts) do      
       ## -----------------
       ## Got Search Result
       { :ok, search_result } ->
-        ##IO.puts("search #{inspect query_tuple} got: #{inspect search_result}")
         ## get search docs from erlang record representation
-        search_docs = elem(search_result, 1)
-       
-        # resolved =
-        #   Enum.map(search_docs, fn x ->
-        #     case parse_search_result(x) do
-        #       { _, json } ->
-        #         Object.resolve_json(json)
-        #         |> Object.statebox_to_entity
-        #       _ ->
-        #         nil
-        #     end
-        #   end)
-        #   |> Enum.filter(&(nil != &1))
-        #   |> Enum.uniq(fn x -> x.primary_key end)  ## just drop for now
+        search_docs = elem(search_result, 1)      
         
         ## Reduce search_docs into a HashDict mapping
         ## the riak object key to a list of stateboxes which
@@ -189,7 +174,7 @@ defmodule Ecto.Adapters.Riak.Search do
         doc_dict = Enum.reduce(search_docs, HashDict.new, fn x, acc ->
             case parse_search_result(x) do
               { key, json } ->
-                box = Object.resolve_json(json)
+                box = Object.resolve_to_statebox(json)
                 fun = &([box | &1])
                 HashDict.update(acc, key, [box], fun)
               _ ->
@@ -251,7 +236,6 @@ defmodule Ecto.Adapters.Riak.Search do
       nil ->
         nil
       _ ->
-        ##IO.puts("proplist: #{inspect proplist}")
         json = { proplist }
         { riak_key, json }
     end
@@ -306,9 +290,9 @@ defmodule Ecto.Adapters.Riak.Search do
         fun = fn entity, dict ->
           ## Get values using fields to create key tuple
           entity_kw = RiakUtil.entity_keyword(entity)
-          values = Enum.map(fields, &(entity_kw[&1]))
+          values = Enum.map(fields, &entity_kw[&1])
           key = list_to_tuple(values)
-          HashDict.update(dict, key, [entity], fn(e)-> [entity | e] end)
+          HashDict.update(dict, key, [entity], fn e -> [entity | e] end)
         end
         
         Enum.reduce(entities, HashDict.new, fun) |> HashDict.values

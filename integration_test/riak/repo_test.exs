@@ -1,18 +1,7 @@
 defmodule Ecto.Integration.Riak.RepoTest do
   use Ecto.Integration.Riak.Case, async: true
+  import Ecto.Integration.Riak.Util
   alias Ecto.Associations.Preloader
-
-  ## Utility macros
-  
-  defmacro wait_assert(clauses) do
-    ## Yokozuna can take some time to index data (1-2 seconds)
-    ## The wait until function
-    quote do
-      wait_until(fn()-> assert unquote(clauses) end)
-    end
-  end
-
-  ## ============================================================
 
   teardown_all do
     delete_all_test_data
@@ -98,11 +87,11 @@ defmodule Ecto.Integration.Riak.RepoTest do
   end
 
   test "get entity with custom primary key" do
-    TestRepo.create(Custom.Entity[foo: "1"])
-    TestRepo.create(Custom.Entity[foo: "2"])
+    c0 = TestRepo.create(Custom.Entity[foo: "1"])
+    c1 = TestRepo.create(Custom.Entity[foo: "2"])
 
-    wait_assert Custom.Entity[foo: "1"] == TestRepo.get(Custom, "1")
-    wait_assert Custom.Entity[foo: "2"] == TestRepo.get(Custom, "2")
+    wait_assert c0 == TestRepo.get(Custom, "1")
+    wait_assert c1 == TestRepo.get(Custom, "2")
     wait_assert nil == TestRepo.get(Custom, "3")
   end
 
@@ -171,7 +160,6 @@ defmodule Ecto.Integration.Riak.RepoTest do
     assert Post.Entity[id: id3] = TestRepo.create(Post.Entity[title: "3", text: "hai"])
     
     query = from(p in Post, where: p.id == ^id1 or p.id == ^id2 or p.id == ^id3)
-    IO.puts("delete all query: #{inspect Ecto.Adapters.Riak.Search.query(query |> Ecto.Query.Util.normalize)}")
     wait_assert 3 = TestRepo.delete_all(query)
     wait_assert [] = TestRepo.all(query)
   end
@@ -398,33 +386,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     post = TestRepo.create(Post.Entity[title: "1", text: "hi"])
     query = from(p in Post, select: { p.title, [ p, { p.text } ] })    
     wait_assert [{ "1", [ ^post, { "hi" } ] }] = TestRepo.all(query)
-  end
-  
-  @type wait_until_fun :: (() -> ExUnit.ExpectationError.t | any)
-  @type msec :: non_neg_integer
-  @spec wait_until(wait_until_fun, msec, msec) :: any
-
-  defp wait_until(fun) do
-    wait_until(fun, 10, 800)
-  end
-
-  defp wait_until(fun, retry, delay) when retry > 0 do
-    res = try do
-            fun.()
-          catch
-            _,rsn -> rsn
-          end
-    if is_exception(res) do
-      if retry == 1 do
-        raise res
-      else
-        :timer.sleep(delay)
-        wait_until(fun, retry-1, delay)
-      end
-    else
-      res
-    end
-  end
+  end   
 
   defp valid_id?(x) do
     is_binary(x) && size(x) == 24
