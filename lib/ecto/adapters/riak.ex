@@ -71,7 +71,6 @@ defmodule Ecto.Adapters.Riak do
             raise AdapterStartError,
               message: "Failed to create search indexes for required models: #{inspect failures}"
           else
-            IO.puts("Search indexes successfully set up")
             :ok
           end
         end

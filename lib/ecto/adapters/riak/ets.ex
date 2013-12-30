@@ -29,7 +29,7 @@ defmodule Ecto.Adapters.Riak.ETS do
     try do
       :ets.delete(@table_name)
     catch
-      _,rsn -> { :error, rsn }
+      _, rsn -> { :error, rsn }
     end
   end
 

@@ -17,7 +17,7 @@ defmodule Ecto.RiakModel do
     quote do
       @queryable_defaults primary_key: { :id, :string, [] },
                           foreign_key_type: :string,
-                          default_fields: [ { :riak_version, :integer, [default: 0] },
+                          default_fields: [ { :version, :integer, [default: 0] },
                                             { :riak_context, :virtual, [default: []] } ]
        
       @behaviour Ecto.Adapters.Riak.Migration
