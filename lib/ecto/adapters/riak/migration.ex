@@ -127,7 +127,7 @@ defmodule Ecto.Adapters.Riak.Migration do
   which the server knows of.
   """
   def migration_required?(entity) do
-    entity.version != current_version(entity)
+    entity.riak_version != current_version(entity)
   end
 
   @spec migrate(entity) :: entity
@@ -197,18 +197,20 @@ defmodule Ecto.Adapters.Riak.Migration do
 
   defp migration_modules_worker(entity, current, target) when current < target do
     ## Upgrade
-    prefix = entity_prefix(entity.model)
+    #mod_str = to_string(entity.model)
+    #prefix = entity_prefix(entity.model)
     modules = :code.all_loaded
       |> Enum.filter(fn { mod, _ } ->
-                         is_migration_module?(mod)
-                         && prefix == entity_prefix(mod)
-                         && mod.version <= target
-                         && mod.version > current
-                     end)
+           is_migration_module?(mod)
+           && sibling_modules?(entity.model, mod) #(prefix == mod || prefix == entity_prefix(mod) || mod_str == mod || mod_str == entity_prefix(mod))
+           && mod.version <= target
+           && mod.version > current
+         end)
       |> Enum.map(fn { mod, _ } -> mod end)
 
     ## Check for duplicates, raising error if any exist
     migration_modules_deduplicate!(modules, entity, target)
+    IO.puts("migration upgrade modules: #{inspect modules}")
     
     ## Sort in ascending order
     Enum.sort(modules, fn m0, m1 -> m0.version < m1.version end)
@@ -216,34 +218,67 @@ defmodule Ecto.Adapters.Riak.Migration do
 
   defp migration_modules_worker(entity, current, target) when current > target do
     ## Downgrade
-    prefix = entity_prefix(entity.model)
+    #mod_str = to_string(entity.model)
+    #prefix = entity_prefix(entity.model)
     modules = :code.all_loaded
       |> Enum.filter(fn { mod, _ } ->
-                         is_migration_module?(mod)
-                         && prefix == entity_prefix(mod)
-                         && mod.version >= target
-                         && mod.version < current
-                     end)
+           is_migration_module?(mod)
+           && sibling_modules?(entity.model, mod)
+           && mod.version >= target
+           && mod.version < current
+         end)
       |> Enum.map(fn { mod, _ } -> mod end)
 
     ## Check for duplicates, raising error if any exist
     migration_modules_deduplicate!(modules, entity, target)
+    IO.puts("migration downgrade modules: #{inspect modules}")
     
     ## Sort in descending order
-    Enum.sort(modules, fn(m0, m1)-> m0.version > m1.version end)
+    Enum.sort(modules, fn m0, m1 -> m0.version > m1.version end)
+  end
+
+  defp sibling_modules?(m0, m1) when m0 == m1 do
+    ## should not have duplicates
+    false
+  end
+
+  defp sibling_modules?(m0, m1) do
+    p0 = entity_prefix(m0)
+    p1 = entity_prefix(m1)
+    
+    ## case where prefix is the name of another model
+    ## Example: `My.Models.Post` vs `My.Models.Post.Ver1`
+    r0 = m0 == p1 || m1 == p0
+
+    ## common shared prefix
+    ## Example: `My.Models.Post.Ver0` vs `My.Models.Post.V2`
+    ## Note that this shouldn't succeed with an example like
+    ## `My.Models.Post` vs `My.Models.Comment`, so we must check
+    ## that the previous condition returned false
+    r1 = !r0 && p1 == p0
+
+    ## Check that the target bucket is the same for models
+    b0 = RiakUtil.bucket(m0)
+    b1 = RiakUtil.bucket(m1)
+    s0 = b0 != nil && b1 != nil && b0 == b1
+
+    ## DONE
+    res = (r0 || r1) && s0
+    ##IO.puts("res: #{r0}, #{r1} => [ m0: #{m0}, m1: #{m1}, p0: #{p0}, p1: #{p1} ]")
+    res
   end
 
   defp migration_modules_deduplicate!(modules, entity, target_version) do
     ## checks for any duplicates in the modules list
     ## and raises an error if so
-    version_set = Enum.reduce(modules, HashSet.new, fn(mod, acc)->
+    version_set = Enum.reduce(modules, HashSet.new, fn mod, acc ->
       try do
         HashSet.put(acc, mod.version)
       rescue
         UndefinedFunctionError ->
           raise MigrationModulesException,
             model: entity.model,
-            entity_version: entity.version,
+            entity_version: entity.riak_version,
             target_version: target_version,
             failed_module: mod,
             modules: modules
@@ -253,11 +288,23 @@ defmodule Ecto.Adapters.Riak.Migration do
     if HashSet.size(version_set) != length(modules) do
       raise MigrationModulesException,
         model: entity.model,
-        entity_version: entity.version,
+        entity_version: entity.riak_version,
         target_version: target_version,
         modules: modules
     else
       false
+    end
+  end
+
+  defp entity_prefix(mod) when is_atom(mod) do
+    regex = %r"^(.*)(\..*)$"
+    res = Regex.run(regex, to_string(mod))
+    if is_list(res) do
+      Enum.slice(res, -2..-2)  ## get second last capture group
+      |> hd
+      |> RiakUtil.to_atom
+    else
+      nil
     end
   end
 
@@ -281,7 +328,7 @@ defmodule Ecto.Adapters.Riak.Migration do
   This gets called 
   """
   def set_current_version(entity, version) do
-    key = "#{entity_model(entity)}_ver"
+    key = RiakUtil.bucket(entity) <> "_ver"
     ETS.put(key, version)
   end
   
@@ -291,15 +338,8 @@ defmodule Ecto.Adapters.Riak.Migration do
   """
   @spec current_version(entity) :: integer
   def current_version(entity) do
-    key = "#{entity_model(entity)}_ver"
+    key = RiakUtil.bucket(entity) <> "_ver"
     ETS.get(key, 0)
   end
-
-  defp entity_model(entity) do
-    ## returns the entity model with any version suffix removed
-    ["Elixir" | entity_prefix(entity.model)]
-    |> Enum.join(".")
-    |> RiakUtil.to_atom
-  end 
                                        
 end

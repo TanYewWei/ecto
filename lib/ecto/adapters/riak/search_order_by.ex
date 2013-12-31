@@ -1,5 +1,4 @@
 defmodule Ecto.Adapters.Riak.SearchOrderBy do
-  alias Ecto.Adapters.Riak.Util, as: RiakUtil
   alias Ecto.Query.Util
 
   @type entity     :: term
@@ -101,9 +100,26 @@ defmodule Ecto.Adapters.Riak.SearchOrderBy do
   end
 
   defp compare_datetime(dir, x, y) do
+    cond do
+      x.year != y.year ->
+        compare_simple_clause(dir, x.year, y.year)
+      x.month != y.month ->
+        compare_simple_clause(dir, x.month, y.month)
+      x.day != y.day ->
+        compare_simple_clause(dir, x.day, y.day)
+      x.hour != y.hour ->
+        compare_simple_clause(dir, x.hour, y.hour)
+      x.min != y.min ->
+        compare_simple_clause(dir, x.min, y.min)
+      x.sec != y.sec ->
+        compare_simple_clause(dir, x.sec, y.sec)
+      true ->
+        :eq
+    end
   end
 
   defp compare_interval(dir, x, y) do
+    compare_datetime(dir, x, y)
   end
 
   defp ascending?(dir) do

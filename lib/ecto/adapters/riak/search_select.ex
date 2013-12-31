@@ -156,7 +156,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
   end
 
   defp select_transform({ op, _, args }, entity) do
-    raise Ecto.QueryError, reason: "Riak select unknown op: #{op}/#{length(args)}"
+    raise Ecto.QueryError, reason: "Riak select unknown op: #{op}/#{length(args)} for entity: #{inspect entity}"
   end
 
   defp select_transform(x, _) do

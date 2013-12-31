@@ -1,12 +1,20 @@
 alias Ecto.Adapters.Riak.Datetime
 alias Ecto.Adapters.Riak.Util, as: RiakUtil
+alias Ecto.Adapters.Riak.Object
 require Ecto.Adapters.Riak.Validators, as: RiakValidate
 
 ## ----------------------------------------------------------------------
 ## Model Definitions
 ## ----------------------------------------------------------------------
 
-defmodule Ecto.Adapters.Riak.MigrationTest.Model.V0 do
+defmodule Ecto.Adapters.Riak.MigrationTest.Model do
+  use Ecto.Model
+
+  queryable "confusing_model" do
+  end
+end
+
+defmodule Ecto.Adapters.Riak.MigrationTest.Model do
   use Ecto.RiakModel  
 
   queryable "model" do
@@ -166,7 +174,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
 
   alias Ecto.Adapters.Riak.ETS
   alias Ecto.Adapters.Riak.Migration
-  alias Ecto.Adapters.Riak.MigrationTest.Model.V0, as: Model0
+  alias Ecto.Adapters.Riak.MigrationTest.Model, as: Model0
   alias Ecto.Adapters.Riak.MigrationTest.Model.Version2, as: Model2
 
   ## ------------------------------------------------------------
@@ -293,14 +301,14 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
   ## ------------------------------------------------------------
 
   defp mock_entity_ver0() do
-    Model0.new(id: "some_unique_id",
-               integer: 1,
+    Model0.new(integer: 1,
                float: 2.0,               
                string: "a string",
                binary: <<0, 1, 2>>,
                datetime: Ecto.DateTime[year: 2000],
                interval: Ecto.Interval[day: 1],
                virtual: "hello")
+      |> Object.create_primary_key
   end
 
   defp mock_entity_ver2() do
@@ -311,6 +319,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
                datetime: Ecto.DateTime[year: 2000],
                interval: Ecto.Interval[day: 1],
                riak_version: 2)
+      |> Object.create_primary_key
   end
 
 end

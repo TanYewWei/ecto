@@ -32,6 +32,7 @@ defmodule Ecto.Integration.Riak.Post do
     field :text, :string
     field :temp, :virtual, default: "temp"
     field :count, :integer
+    field :riak_version, :integer, default: 0
     has_many :comments, Ecto.Integration.Riak.Comment
     has_one :permalink, Ecto.Integration.Riak.Permalink
   end
@@ -49,6 +50,7 @@ defmodule Ecto.Integration.Riak.Comment do
     field :posted,   :datetime
     field :interval, :interval
     field :bytes,    :binary
+    field :riak_version, :integer, default: 0
     belongs_to :post, Ecto.Integration.Riak.Post ##, type: :string
   end
 
@@ -62,6 +64,7 @@ defmodule Ecto.Integration.Riak.Permalink do
 
   queryable "permalinks" do
     field :url, :string
+    field :riak_version, :integer, default: 0
     belongs_to :post, Ecto.Integration.Riak.Post ##, type: :string
   end
 
@@ -74,7 +77,8 @@ defmodule Ecto.Integration.Riak.Custom do
   use Ecto.RiakModel
 
   queryable "customs", primary_key: false do
-    field :foo,     :string, primary_key: true
+    field :foo, :string, primary_key: true
+    field :riak_version, :integer, default: 0
   end
 
   def version(), do: 0

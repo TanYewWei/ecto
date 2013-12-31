@@ -9,17 +9,26 @@ defmodule Ecto.Adapters.Riak.Util do
   Returns the bucket name for an Ecto Model.
   Each bucket should only store one type of Ecto Model.
   """
-  @spec model_bucket(atom) :: binary
-  def model_bucket(model) do
-    Regex.replace(%r"^Elixir.", to_string(model), "")
+  @spec bucket(atom | entity) :: binary
+  
+  def bucket(x) when is_atom(x) do
+    if function_exported?(x, :__model__, 1) do
+      x.__model__(:source)
+    else
+      nil
+    end
+  end
+
+  def bucket(entity) do
+    bucket(entity.model)
   end
 
   @doc """
   Returns the search index for an Ecto Model.
   Each Model should have it's own search index
   """
-  @spec model_search_index(atom) :: binary
-  def model_search_index(model) do
+  @spec search_index(atom) :: binary
+  def search_index(model) do
     Regex.replace(%r"^Elixir.|.Entity$", to_string(model), "")
   end
 

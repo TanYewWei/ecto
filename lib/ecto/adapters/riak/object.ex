@@ -56,7 +56,7 @@ defmodule Ecto.Adapters.Riak.Object do
     kws = [{ @json_key_model_name, to_string(entity.model) } | kws]
     
     ## Form riak object
-    bucket = RiakUtil.model_bucket(entity.model)
+    bucket = RiakUtil.bucket(entity)
     key = entity.primary_key
     value = JSON.encode({ kws })
     RiakObject.new(bucket, key, value, @content_type)
@@ -297,39 +297,6 @@ defmodule Ecto.Adapters.Riak.Object do
             :interval -> "i_dts"
           end
       end
-  end
-
-  defp yz_key_atom(key, type) do
-    yz_key(key, type) |> RiakUtil.to_atom
-  end
-
-  @spec yz_key_type(binary) :: atom | {:list, atom}
-  defp yz_key_type(key) do
-    [suffix] = Regex.run(@yz_key_regex, key)
-      |> Enum.filter(&String.starts_with?(&1, "_"))
-    case suffix do
-      "i"      -> :integer
-      "f"      -> :float
-      "b64_s"  -> :binary
-      "s"      -> :string
-      "b"      -> :boolean
-      "dt"     -> :datetime
-      "i_dt"   -> :interval
-      "is"     -> { :list, :integer }
-      "fs"     -> { :list, :float }
-      "b64_ss" -> { :list, :binary }
-      "ss"     -> { :list, :string }
-      "bs"     -> { :list, :boolean }
-      "dts"    -> { :list, :datetime }
-      "i_dts"  -> { :list, :interval }
-    end
-  end
-
-  defp is_list_key?(key) when is_binary(key) do
-    ## Returns true if the key has a YZ suffix that indicates
-    ## a multi-value (list) type
-    regex = %r"_[is|fs|bs|ss|b64_ss|dts]$"
-    Regex.match?(regex, key)
   end
 
   defp value_hash(term) do

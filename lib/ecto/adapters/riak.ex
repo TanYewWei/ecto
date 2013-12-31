@@ -220,7 +220,7 @@ defmodule Ecto.Adapters.Riak do
   """
   @spec delete(Ecto.Repo.t, Ecto.Entity.t) :: :ok
   def delete(repo, entity) do
-    bucket = RiakUtil.model_bucket(entity.model)
+    bucket = RiakUtil.bucket(entity.model)
     key = entity.primary_key
     fun = fn socket -> Riak.delete(socket, bucket, key) end
     case use_worker(repo, fun) do
@@ -242,7 +242,7 @@ defmodule Ecto.Adapters.Riak do
       case Search.execute(socket, query_tuple, post_proc_fun) do
         entities when is_list(entities) ->
           Enum.reduce(entities, 0, fn entity, acc ->
-            bucket = RiakUtil.model_bucket(entity.model)
+            bucket = RiakUtil.bucket(entity.model)
             key = entity.primary_key
             case Riak.delete(socket, bucket, key) do
               :ok -> acc + 1

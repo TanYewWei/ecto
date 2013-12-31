@@ -118,8 +118,8 @@ defmodule Ecto.Adapters.Riak.Search do
   def query(Query[] = query) do    
     sources = create_names(query)  # :: [source]
     model = Util.model(query.from)
-    search_index = RiakUtil.model_search_index(model)
-    bucket = RiakUtil.model_bucket(model)
+    search_index = RiakUtil.search_index(model)
+    bucket = RiakUtil.bucket(model)
     
     ## Check to see if join is specified
     ## and raise error if present
@@ -363,10 +363,10 @@ defmodule Ecto.Adapters.Riak.Search do
 
   def search_index_reload(socket, model) do
     schema = RiakUtil.default_search_schema()
-    search_index = RiakUtil.model_search_index(model)
+    search_index = RiakUtil.search_index(model)
     case RiakSocket.create_search_index(socket, search_index, schema, []) do
       :ok ->
-        bucket = RiakUtil.model_bucket(model)
+        bucket = RiakUtil.bucket(model)
         case RiakSocket.set_search_index(socket, bucket, search_index) do
           :ok ->
             IO.puts("set search index for bucket: #{bucket}, index: #{search_index}")
