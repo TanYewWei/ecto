@@ -9,7 +9,6 @@ defmodule Ecto.Adapters.Riak do
   alias Ecto.Adapters.Riak.ETS
   alias Ecto.Adapters.Riak.Object, as: RiakObj
   alias Ecto.Adapters.Riak.Search
-  alias Ecto.Adapters.Riak.Supervisor
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
   alias Ecto.Query.Query
   alias Ecto.Query.Util
@@ -118,8 +117,8 @@ defmodule Ecto.Adapters.Riak do
   @doc """
   Stops any connection pooling or supervision started with `start_link/1`.
   """
-  def stop(repo) do
-    Supervisor.disconnect(repo.__riak__(:pool_group))
+  def stop(repo) do    
+    :ok
   end
   
   @doc """
