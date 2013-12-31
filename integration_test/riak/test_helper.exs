@@ -27,7 +27,7 @@ end
 defmodule Ecto.Integration.Riak.Post do
   use Ecto.RiakModel
 
-  queryable "posts" do
+  queryable "ecto.integration.riak.posts" do
     field :title, :string
     field :text, :string
     field :temp, :virtual, default: "temp"
@@ -45,7 +45,7 @@ end
 defmodule Ecto.Integration.Riak.Comment do
   use Ecto.RiakModel
 
-  queryable "comments" do
+  queryable "ecto.integration.riak.comments" do
     field :text,     :string
     field :posted,   :datetime
     field :interval, :interval
@@ -62,7 +62,7 @@ end
 defmodule Ecto.Integration.Riak.Permalink do
   use Ecto.RiakModel
 
-  queryable "permalinks" do
+  queryable "ecto.integration.riak.permalinks" do
     field :url, :string
     field :riak_version, :integer, default: 0
     belongs_to :post, Ecto.Integration.Riak.Post ##, type: :string
@@ -76,7 +76,7 @@ end
 defmodule Ecto.Integration.Riak.Custom do
   use Ecto.RiakModel
 
-  queryable "customs", primary_key: false do
+  queryable "ecto.integration.riak.customs", primary_key: false do
     field :foo, :string, primary_key: true
     field :riak_version, :integer, default: 0
   end
@@ -147,10 +147,10 @@ end
 ## Setup
 ## ----------------------------------------------------------------------
 
-posts_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Post)
-comments_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Comment)
-permalinks_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Permalink)
-custom_bucket = RiakUtil.model_bucket(Ecto.Integration.Riak.Custom)
+posts_bucket = RiakUtil.bucket(Ecto.Integration.Riak.Post)
+comments_bucket = RiakUtil.bucket(Ecto.Integration.Riak.Comment)
+permalinks_bucket = RiakUtil.bucket(Ecto.Integration.Riak.Permalink)
+custom_bucket = RiakUtil.bucket(Ecto.Integration.Riak.Custom)
 buckets = [ posts_bucket, comments_bucket, permalinks_bucket, custom_bucket ]
 
 { :ok, socket } = RiakSocket.start_link('127.0.0.1', 8000)

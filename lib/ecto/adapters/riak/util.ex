@@ -29,7 +29,8 @@ defmodule Ecto.Adapters.Riak.Util do
   """
   @spec search_index(atom) :: binary
   def search_index(model) do
-    Regex.replace(%r"^Elixir.|.Entity$", to_string(model), "")
+    bucket(model)
+    #Regex.replace(%r"^Elixir.|.Entity$", to_string(model), "")
   end
 
   @doc """

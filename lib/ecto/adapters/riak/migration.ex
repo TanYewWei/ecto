@@ -197,12 +197,10 @@ defmodule Ecto.Adapters.Riak.Migration do
 
   defp migration_modules_worker(entity, current, target) when current < target do
     ## Upgrade
-    #mod_str = to_string(entity.model)
-    #prefix = entity_prefix(entity.model)
     modules = :code.all_loaded
       |> Enum.filter(fn { mod, _ } ->
            is_migration_module?(mod)
-           && sibling_modules?(entity.model, mod) #(prefix == mod || prefix == entity_prefix(mod) || mod_str == mod || mod_str == entity_prefix(mod))
+           && sibling_modules?(entity.model, mod)
            && mod.version <= target
            && mod.version > current
          end)
@@ -210,7 +208,6 @@ defmodule Ecto.Adapters.Riak.Migration do
 
     ## Check for duplicates, raising error if any exist
     migration_modules_deduplicate!(modules, entity, target)
-    IO.puts("migration upgrade modules: #{inspect modules}")
     
     ## Sort in ascending order
     Enum.sort(modules, fn m0, m1 -> m0.version < m1.version end)
@@ -231,7 +228,6 @@ defmodule Ecto.Adapters.Riak.Migration do
 
     ## Check for duplicates, raising error if any exist
     migration_modules_deduplicate!(modules, entity, target)
-    IO.puts("migration downgrade modules: #{inspect modules}")
     
     ## Sort in descending order
     Enum.sort(modules, fn m0, m1 -> m0.version > m1.version end)
@@ -263,9 +259,7 @@ defmodule Ecto.Adapters.Riak.Migration do
     s0 = b0 != nil && b1 != nil && b0 == b1
 
     ## DONE
-    res = (r0 || r1) && s0
-    ##IO.puts("res: #{r0}, #{r1} => [ m0: #{m0}, m1: #{m1}, p0: #{p0}, p1: #{p1} ]")
-    res
+    (r0 || r1) && s0
   end
 
   defp migration_modules_deduplicate!(modules, entity, target_version) do

@@ -7,17 +7,24 @@ require Ecto.Adapters.Riak.Validators, as: RiakValidate
 ## Model Definitions
 ## ----------------------------------------------------------------------
 
-defmodule Ecto.Adapters.Riak.MigrationTest.Model do
-  use Ecto.Model
+defmodule Ecto.Adapters.Riak.MigrationTest.Model.BadVer1 do
+  ## migration should be smart enough to ignored
+  ## this badly-formed module
+  use Ecto.RiakModel
 
   queryable "confusing_model" do
+    field :riak_version, :integer, default: 1
   end
+
+  def version(), do: 1
+  def migrate_from_previous(x), do: x
+  def migrate_from_newer(x), do: x
 end
 
 defmodule Ecto.Adapters.Riak.MigrationTest.Model do
   use Ecto.RiakModel  
 
-  queryable "model" do
+  queryable "ecto.adapters.riak.migrationtest.model" do
     field :integer,  :integer
     field :float,    :float
     field :string,   :string
@@ -62,7 +69,7 @@ end
 defmodule Ecto.Adapters.Riak.MigrationTest.Model.Ver1 do
   use Ecto.RiakModel
 
-  queryable "model" do
+  queryable "ecto.adapters.riak.migrationtest.model" do
     field :number,   :integer  ## field renaming
     field :int,      :integer  ## type change
     field :string,   :string
@@ -130,7 +137,7 @@ end
 defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version2 do
   use Ecto.RiakModel
 
-  queryable "model" do
+  queryable "ecto.adapters.riak.migrationtest.model" do
     field :number,   :integer
     field :int,      :integer
     field :string,   { :list, :string } ## type change

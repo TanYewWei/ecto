@@ -191,6 +191,8 @@ defmodule Ecto.Adapters.Riak.Search do
 
         ## Perform any migrations if needed
         migrated = Enum.map(resolved, &Migration.migrate/1)
+        #IO.puts("resolved: #{inspect resolved}")
+        #IO.puts("migrated: #{inspect migrated}")
           
         ## Apply post_proc_fun and we're done
         post_proc_fun.(migrated)
