@@ -118,7 +118,7 @@ defmodule Ecto.Adapters.Riak do
   Stops any connection pooling or supervision started with `start_link/1`.
   """
   def stop(repo) do    
-    :ok
+    Pool.rm_group(repo.__riak__(:pool_group))
   end
   
   @doc """
@@ -270,7 +270,7 @@ defmodule Ecto.Adapters.Riak do
         try do
           fun.(worker)
         after
-          Pool.return_group_member(pool_group, worker, :ok)
+          Pool.return_group_member(pool_group, worker)
         end
       rsn ->
         { :error, rsn }

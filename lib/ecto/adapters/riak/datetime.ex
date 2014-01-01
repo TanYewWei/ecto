@@ -6,33 +6,30 @@ defmodule Ecto.Adapters.Riak.Datetime do
   @type min       :: non_neg_integer
   @type sec       :: non_neg_integer
   @type msec      :: non_neg_integer
-  @type date      :: {year, month, day}
-  @type time      :: {hour, min, sec}
-  @type datetime  :: {date, time}
-  @type timestamp :: {megasec::integer, sec::integer, microsec::integer}
+  @type date      :: { year, month, day }
+  @type time      :: { hour, min, sec }
+  @type datetime  :: { date, time }
   @type dt        :: date | time | datetime
   @type ecto_dt   :: Ecto.DateTime
   @type ecto_int  :: Ecto.Interval
   @type ecto_type :: ecto_dt | ecto_int
 
   @spec parse(binary) :: datetime
+
   def parse(nil), do: nil
+
   def parse(x) do
     [ year, month, day, hour, min, sec ] =
       (String.split(x, %r"-|:|T|Z", trim: true)
-       |> Enum.map(fn(bin)->
-                       { int, _ } = Integer.parse(bin)
-                       int
-                   end))
-    case String.last(x) do
-      "Z" ->
-        { { year, month, day }, { hour, min, sec} }
-      _ ->
-        raise "invalid argument"
-    end
+       |> Enum.map(fn bin ->
+            { int, _ } = Integer.parse(bin)
+            int
+          end))
+    { { year, month, day }, { hour, min, sec} }
   end
 
   @spec parse_to_ecto_datetime(binary) :: ecto_type
+  
   def parse_to_ecto_datetime(x) do
     case parse(x) do
       nil -> nil
@@ -43,6 +40,7 @@ defmodule Ecto.Adapters.Riak.Datetime do
   end
 
   @spec parse_to_ecto_interval(binary) :: ecto_type
+  
   def parse_to_ecto_interval(x) do
     case parse(x) do
       nil -> nil
@@ -52,33 +50,8 @@ defmodule Ecto.Adapters.Riak.Datetime do
     end
   end
   
-  @spec compare(datetime, datetime) :: boolean
-  def compare(date0, date1) do
-    { { y0,m0,d0 }, { h0,n0,s0 } } = date0
-    { { y1,m1,d1 }, { h1,n1,s1 } } = date1
-    cond do
-      y0 != y1 -> y0 < y1
-      m0 != m1 -> m0 < m1
-      d0 != d1 -> d0 < d1
-      h0 != h1 -> h0 < h1
-      n0 != n1 -> n0 < n1
-      s0 != s1 -> s0 < s1
-      true     -> false
-    end
-  end
-
-  @spec datetime_to_timestamp(datetime | date) :: timestamp
-  
-  def datetime_to_timestamp({_,_,_}=x) do 
-    datetime_to_timestamp({x, {0,0,0}})
-  end
-  
-  def datetime_to_timestamp(x) do
-    sec = :calendar.datetime_to_gregorian_seconds(x) - 62167219200
-    { div(sec,1000000), rem(sec,1000000), 0 }
-  end
-  
   @spec now_datetime() :: datetime
+  
   def now_datetime(), do: :calendar.now_to_universal_time(:os.timestamp)
 
   def now_local_datetime(), do: :calendar.now_to_local_time(:os.timestamp)
@@ -86,28 +59,23 @@ defmodule Ecto.Adapters.Riak.Datetime do
   def now_ecto_datetime(), do: now_datetime |> to_ecto_datetime
 
   def now_local_ecto_datetime(), do: now_local_datetime |> to_ecto_datetime
-
-  @spec now_string() :: binary
-  def now_string() do
-    datetime_to_string(:os.timestamp)
-  end  
   
   @spec datetime_to_string(datetime) :: binary
-  def datetime_to_string({_,_,_}=x) do
-    datetime_to_string({x,{0,0,0}})
+
+  def datetime_to_string({ _, _, _ } = x) do
+    datetime_to_string({ x, { 0, 0, 0 } })
   end
   
   def datetime_to_string(x) when is_record(x, Ecto.DateTime) do
     ecto_type_to_datetime(x) |> datetime_to_string()
-  end
+  end  
 
   def datetime_to_string({ { year, month, day }, { hour, min, sec } }) do
     "#{year}-#{month}-#{day}T#{hour}:#{min}:#{sec}Z"
   end
 
   def interval_to_string(x) when is_record(x, Ecto.Interval) do
-    { { year, month, day }, { hour, min, sec } } = ecto_type_to_datetime(x)
-    "#{year}-#{month}-#{day}T#{hour}:#{min}:#{sec}Z"
+    ecto_type_to_datetime(x) |> datetime_to_string()
   end
 
   @spec to_ecto_datetime(dt) :: ecto_dt
@@ -251,7 +219,7 @@ defmodule Ecto.Adapters.Riak.Datetime do
     end
   end
 
-  def solr_datetime({{year, month, day}, {hour, min, sec}}) do
+  def solr_datetime({ { year, month, day }, { hour, min, sec } }) do
     "#{year}-#{month}-#{day}T#{hour}:#{min}:#{sec}Z"
   end
 

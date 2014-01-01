@@ -63,10 +63,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
   end
 
   defp select_transform(list, entity) when is_list(list) do
-    Enum.map(list,
-             fn(elem)->
-                 select_transform(elem, entity)
-             end)
+    Enum.map(list, fn elem -> select_transform(elem, entity) end)
   end
 
   defp select_transform({ { :., _, [{ :&, _, [_] }, field] }, _, _ }, entity) when is_atom(field) do
@@ -174,7 +171,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
   defp select_aggregate_transform({op, _, args}, entities)
   when is_atom(op) and op in @aggregate_ops do
     ## first argument of args must be a field accessor
-    {{:., _, [{:&, _, _}, field]}, _, _} = hd(args)
+    { {:., _, [{ :&, _, _ }, field] }, _, _ } = hd(args)
     
     ## Extractor functions
     value_fn = fn entity -> SearchUtil.entity_keyword(entity)[field] end
@@ -196,13 +193,13 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
         |> Enum.min
       :sum ->
         Enum.reduce(entities, 0, fn entity, acc ->
-                                     value = value_fn.(entity)
-                                     value = case value_type_fn.(entity) do
-                                               :integer -> round(value)
-                                               :float   -> value
-                                             end
-                                     acc + value
-                                 end)
+          value = value_fn.(entity)
+          value = case value_type_fn.(entity) do
+                    :integer -> round(value)
+                    :float   -> value
+                  end
+          acc + value
+        end)
       _ ->
         raise Ecto.QueryError, reason: "unsupported select aggregate op: #{op}"
     end

@@ -1,5 +1,5 @@
 defmodule Ecto.Adapters.Riak.JSON do  
-  @type json      :: {[ any ]}
+  @type json :: { list }
   
   def encode(x) do
     :jiffy.encode(x)
@@ -10,7 +10,7 @@ defmodule Ecto.Adapters.Riak.JSON do
   end
 
   def get(json, key, default // nil) when is_binary(key) do
-    get(json, {key}, default)
+    get(json, { key }, default)
   end
   
   def get(json, keys, default) when is_tuple(keys) do
@@ -21,7 +21,7 @@ defmodule Ecto.Adapters.Riak.JSON do
   end
 
   def put(json, key, val) when is_binary(key) do
-    put(json, {key}, val)
+    put(json, { key }, val)
   end
   
   def put(json, keys, val) when is_tuple(keys) do
@@ -58,7 +58,7 @@ defmodule Ecto.Adapters.Riak.JSON do
   @spec keys(json) :: [binary]
   def keys(x) do
     { inner } = x
-    Enum.map(inner, fn({k,_})-> k end)
+    Enum.map(inner, fn { k, _ } -> k end)
   end
 
   @doc """
@@ -68,7 +68,7 @@ defmodule Ecto.Adapters.Riak.JSON do
   @spec values(json) :: [term]
   def values(x) do
     { inner } = x
-    Enum.map(inner, fn({_,v})-> v end)
+    Enum.map(inner, fn { _, v } -> v end)
   end
 
   @doc "Substitutes elixir nil for JSON atom :null"
