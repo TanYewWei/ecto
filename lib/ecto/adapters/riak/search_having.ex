@@ -28,7 +28,7 @@ defmodule Ecto.Adapters.Riak.SearchHaving do
     ## construct predicate function which gets called
     ## with a list of entities, returning true if the group
     ## satisfies the havings conditions
-    fn(entities) ->
+    fn entities ->
         cond do
           havings == [] ->
             entities
@@ -37,12 +37,10 @@ defmodule Ecto.Adapters.Riak.SearchHaving do
           hd(entities) |> is_list ->
             ## entities :: [ [entity] ]
             ## as a result of a group_by post processing function
-            ##Enum.map(entities, fn(x)-> IO.puts length(x) end)
-            Enum.filter(entities,
-                        fn(entity_list)->
-                            Enum.map(havings, &having_filter(&1.expr, entity_list))
-                            |> Enum.all?(&(true == &1))
-                        end)
+            Enum.filter(entities, fn entity_list ->
+              Enum.map(havings, &having_filter(&1.expr, entity_list))
+                |> Enum.all?(&(true == &1))
+            end)
           true ->
             ## In this case, treat all entities as a single group.
             ## This means that either the entire group evaluates to true
@@ -57,21 +55,22 @@ defmodule Ecto.Adapters.Riak.SearchHaving do
     end
   end
   
-  @spec having_filter(term, [entity]) :: boolean ## Intermediate results can be any term
+  @spec having_filter(term, [entity]) :: boolean
 
-  defp having_filter({{:., _, [{:&, _, [_]}, field]}, _, _}, entities) when is_atom(field) do
+  defp having_filter({ { :., _, [{ :&, _, [_] }, field] }, _, _ }, entities)
+  when is_atom(field) do
     ## attribute accessor
-    Enum.map(entities, fn(entity)-> SearchUtil.entity_keyword(entity)[field] end)
+    Enum.map(entities, fn entity -> SearchUtil.entity_keyword(entity)[field] end)
   end
 
   defp having_filter({op, _, args}, entities)
   when is_atom(op) and op in @aggregate_ops do
     ## first argument of args must be a field accessor
-    {{:., _, [{:&, _, _}, field]}, _, _} = hd(args)
+    { {:., _, [{ :&, _, _ }, field] }, _, _ } = hd(args)
     
     ## Extractor functions
-    value_fn = fn(entity)-> SearchUtil.entity_keyword(entity)[field] end
-    value_type_fn = fn(entity)-> SearchUtil.entity_field_type(entity, field) end
+    value_fn = fn entity -> SearchUtil.entity_keyword(entity)[field] end
+    value_type_fn = fn entity -> SearchUtil.entity_field_type(entity, field) end
     
     ## Dispatch -- note that we are returning 
     ## a list of the aggregate value
@@ -89,14 +88,14 @@ defmodule Ecto.Adapters.Riak.SearchHaving do
         Enum.map(entities, value_fn)
         |> Enum.min
       :sum ->
-        Enum.reduce(entities, 0, fn(entity, acc)->
-                                     value = value_fn.(entity)
-                                     value = case value_type_fn.(entity) do
-                                               :integer -> round(value)
-                                               :float   -> value
-                                             end
-                                     acc + value
-                                 end)
+        Enum.reduce(entities, 0, fn entity, acc ->
+          value = value_fn.(entity)
+          value = case value_type_fn.(entity) do
+                    :integer -> round(value)
+                    :float   -> value
+                  end
+          acc + value
+        end)
       _ ->
         raise Ecto.QueryError, reason: "unsupported select aggregate op: #{op}"
     end]
@@ -105,24 +104,22 @@ defmodule Ecto.Adapters.Riak.SearchHaving do
   defp having_filter({op, _, [left, right]}, entities)
   when is_atom(op) and op in @binary_ops do
     ## takes an operator, and recursively operates on 
-    ##IO.puts("left: #{left}")
-    ##IO.puts("right: #{right}")
     left = having_filter(left, entities)
     right = having_filter(right, entities)
     keyword = List.zip([left, right])
     case op do
       :pow ->
-        Enum.map(keyword, fn({x,y})-> :math.pow(x, y) end)
+        Enum.map(keyword, fn { x, y } -> :math.pow(x, y) end)
       :rem ->
-        Enum.map(keyword, fn({x,y})-> rem(x, y) end)
+        Enum.map(keyword, fn { x, y } -> rem(x, y) end)
       :+ ->
-        Enum.map(keyword, fn({x,y})-> x + y end)
+        Enum.map(keyword, fn { x, y } -> x + y end)
       :- ->
-        Enum.map(keyword, fn({x,y})-> x - y end)
+        Enum.map(keyword, fn { x, y } -> x - y end)
       :/ ->
-        Enum.map(keyword, fn({x,y})-> x / y end)
+        Enum.map(keyword, fn { x, y } -> x / y end)
       :* ->
-        Enum.map(keyword, fn({x,y})-> x * y end)
+        Enum.map(keyword, fn { x, y } -> x * y end)
       _ ->
         raise Ecto.QueryError, reason: "unsupported having binary op: #{op}"
     end
@@ -137,23 +134,23 @@ defmodule Ecto.Adapters.Riak.SearchHaving do
     keyword = List.zip([left, right])
     case op do           
       :== ->
-        Enum.all?(keyword, fn({x,y})-> x == y end)
+        Enum.all?(keyword, fn { x, y } -> x == y end)
       :!= ->
-        Enum.all?(keyword, fn({x,y})-> x != y end)
+        Enum.all?(keyword, fn { x, y } -> x != y end)
       :< ->
-        Enum.all?(keyword, fn({x,y})-> x < y end)
+        Enum.all?(keyword, fn { x, y } -> x < y end)
       :<= ->
-        Enum.all?(keyword, fn({x,y})-> x <= y end)
+        Enum.all?(keyword, fn { x, y } -> x <= y end)
       :> ->
-        Enum.all?(keyword, fn({x,y})-> x > y end)
+        Enum.all?(keyword, fn { x, y } -> x > y end)
       :>= ->
-        Enum.all?(keyword, fn({x,y})-> x >= y end)
+        Enum.all?(keyword, fn { x, y } -> x >= y end)
       :- ->
-        Enum.all?(keyword, fn({x,y})-> x - y end)
+        Enum.all?(keyword, fn { x, y } -> x - y end)
       :and ->
-        Enum.all?(keyword, fn({x,y})-> x and y end)
+        Enum.all?(keyword, fn { x, y } -> x and y end)
       :or ->
-        Enum.all?(keyword, fn({x,y})-> x or y end)
+        Enum.all?(keyword, fn { x, y } -> x or y end)
       _ ->
         raise Ecto.QueryError, reason: "unsupported having predicate op: #{op}"
     end

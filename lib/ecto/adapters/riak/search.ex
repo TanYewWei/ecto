@@ -103,13 +103,10 @@ defmodule Ecto.Adapters.Riak.Search do
   ----------------------------------------------------------------------
   NOTES
   ----------------------------------------------------------------------
-
-  - JOIN is not supported
-
   """
 
   @doc """
-  Constructs a tuple {{querystring, [search_option]}, post_proc_fun}
+  Constructs a tuple { { querystring, [search_option] }, post_proc_fun }
   The querystring and search_option are sent to YZ as a search request,
   where post_proc_fun/1 should  be called on all results of
   the search query in the execute/3 function below.
@@ -126,9 +123,9 @@ defmodule Ecto.Adapters.Riak.Search do
     join(query) 
 
     ## Build Query Part
-    where    = SearchWhere.query(query.wheres, sources)
-    limit    = limit(query.limit)
-    offset   = offset(query.offset)
+    where  = SearchWhere.query(query.wheres, sources)
+    limit  = limit(query.limit)
+    offset = offset(query.offset)
     
     ## querystring defaults to all results
     querystring = Enum.join([ where ])
@@ -191,8 +188,6 @@ defmodule Ecto.Adapters.Riak.Search do
 
         ## Perform any migrations if needed
         migrated = Enum.map(resolved, &Migration.migrate/1)
-        #IO.puts("resolved: #{inspect resolved}")
-        #IO.puts("migrated: #{inspect migrated}")
           
         ## Apply post_proc_fun and we're done
         post_proc_fun.(migrated)
@@ -371,7 +366,6 @@ defmodule Ecto.Adapters.Riak.Search do
         bucket = RiakUtil.bucket(model)
         case RiakSocket.set_search_index(socket, bucket, search_index) do
           :ok ->
-            IO.puts("set search index for bucket: #{bucket}, index: #{search_index}")
             :ok
           _ ->
             { :error, "failed to set search index '#{search_index}' on bucket '#{bucket}'" }

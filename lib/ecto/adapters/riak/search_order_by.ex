@@ -39,7 +39,6 @@ defmodule Ecto.Adapters.Riak.SearchOrderBy do
         fn e0, e1 ->
            v0 = apply(e0, field, [])
            v1 = apply(e1, field, [])
-           ##IO.puts("compare: #{inspect v0}, #{inspect v1}, #{field_type}")
            case field_type do
              :datetime ->
                compare_datetime(direction, v0, v1)

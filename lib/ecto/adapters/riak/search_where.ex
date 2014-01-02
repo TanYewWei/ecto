@@ -12,43 +12,42 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   ## API
 
   def query(wheres, sources) do
-    #IO.puts("where query: #{inspect wheres}, sources: #{inspect sources}")
     Enum.map_join(wheres,
                   " ",
-                  fn(QueryExpr[expr: expr])->
+                  fn QueryExpr[expr: expr] ->
                       where_expr(expr, sources)
                   end)
   end
 
-  defp where_expr({:., _, [{:&, _, [_]}=var, field]}, sources) when is_atom(field) do
+  defp where_expr({ :., _, [{ :&, _, [_] }=var, field] }, sources) when is_atom(field) do
     source = Util.find_source(sources, var)
     entity = Util.entity(source)
     type = entity.__entity__(:field_type, field)
     RiakObj.yz_key(field, type)
   end
 
-  defp where_expr({:!, _, [expr]}, sources) do
+  defp where_expr({ :!, _, [expr] }, sources) do
     "-" <> where_expr(expr, sources)
   end
 
-  defp where_expr({:==, _, [nil, right]}, sources) do
+  defp where_expr({ :==, _, [nil, right] }, sources) do
     "-" <> where_expr(right, sources) <> ":*"
   end
 
-  defp where_expr({:==, _, [left, nil]}, sources) do
+  defp where_expr({ :==, _, [left, nil] }, sources) do
     "-" <> where_expr(left, sources) <> ":*"
   end
 
-  defp where_expr({:!=, _, [nil, right]}, sources) do
+  defp where_expr({ :!=, _, [nil, right] }, sources) do
     where_expr(right, sources) <> ":*"
   end
 
-  defp where_expr({:!=, _, [left, nil]}, sources) do 
+  defp where_expr({ :!=, _, [left, nil] }, sources) do 
     where_expr(left, sources) <> ":*"
   end
 
   ## element in range
-  defp where_expr({:in, _, [left, Range[first: first, last: last]]}, sources) do
+  defp where_expr({ :in, _, [left, Range[first: first, last: last]] }, sources) do
     field = where_expr(left, sources)
     range_start = where_expr(first, sources)
     range_end = where_expr(last, sources)
@@ -56,7 +55,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   end
 
   ## element in collection
-  defp where_expr({:in, _, [left, right]}, sources) do
+  defp where_expr({ :in, _, [left, right] }, sources) do
     where_expr(left, sources) <> ":(" <> where_expr(right, sources) <> ")"
   end
 
@@ -66,27 +65,27 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   end
 
   ## range handling
-  defp where_expr({:.., _, [first, last]}, sources) do
+  defp where_expr({ :.., _, [first, last] }, sources) do
     where_expr(Enum.to_list(first..last), sources)
   end 
 
-  defp where_expr({:/, _, _}, _) do
+  defp where_expr({ :/, _, _ }, _) do
     raise Ecto.QueryError, reason: "where queries to Riak do not permit the `/` operator"
   end
 
-  defp where_expr({:pow, _, _}, _) do
+  defp where_expr({ :pow, _, _ }, _) do
     raise Ecto.QueryError, reason: "where queries to Riak do not permit the `pow` operator"
   end
 
-  defp where_expr({:rem, _, _}, _) do
+  defp where_expr({ :rem, _, _ }, _) do
     raise Ecto.QueryError, reason: "where queries to Riak do not permit the `rem` operator"
   end
 
-  defp where_expr({arg, _, []}, sources) when is_tuple(arg) do
+  defp where_expr({ arg, _, [] }, sources) when is_tuple(arg) do
     where_expr(arg, sources)
   end
 
-  defp where_expr({fun, _, args}, sources) 
+  defp where_expr({ fun, _, args }, sources) 
   when is_atom(fun) and is_list(args) and fun in @unary_ops do
     arg = where_expr(Enum.first(args), sources)
     case fun do
@@ -97,7 +96,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
     end
   end    
 
-  defp where_expr({fun, _, [left, right]}, sources)
+  defp where_expr({ fun, _, [left, right] }, sources)
   when is_atom(fun) and fun in @binary_ops do
     cond do
       ## Datetime operations
@@ -169,7 +168,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
     literal(literal)
   end 
   
-  defp op_to_binary({op, _, [x, y]}=expr, sources) when op in @binary_ops do
+  defp op_to_binary({ op, _, [x, y] } = expr, sources) when op in @binary_ops do
     case op do
       :== when x == nil or y == nil ->
         where_expr(expr, sources)
@@ -213,7 +212,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   end
 
   defp literal(literal) when is_binary(literal) do
-    literal  ## TODO: escaping
+    literal
   end
 
   defp literal(literal) when is_number(literal) do

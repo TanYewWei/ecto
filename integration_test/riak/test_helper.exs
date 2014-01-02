@@ -127,8 +127,10 @@ defmodule Ecto.Integration.Riak.Util do
   def wait_until(fun, retry, delay) when retry > 0 do
     res = try do
             fun.()
+          rescue
+            x -> x
           catch
-            _,rsn -> rsn
+            err,rsn -> { err, rsn }
           end
     if is_exception(res) do
       if retry == 1 do

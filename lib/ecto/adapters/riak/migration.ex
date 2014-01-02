@@ -135,12 +135,6 @@ defmodule Ecto.Adapters.Riak.Migration do
     entity_version = entity.riak_version
     target_version = current_version(entity)
     
-    ## Make upgrades implicit 
-    ## and set current version accordingly
-    if entity_version > target_version do
-      set_current_version(entity, entity_version)
-    end
-    
     cond do
       entity_version == target_version ->
         entity

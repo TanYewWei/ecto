@@ -1,5 +1,5 @@
 defmodule Ecto.Integration.Riak.TypesTest do
-  use Ecto.Integration.Riak.Case
+  use Ecto.Integration.Riak.Case, async: true
   import Ecto.Integration.Riak.Util
 
   test "datetime type" do

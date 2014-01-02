@@ -75,7 +75,6 @@ defmodule Ecto.Adapters.Riak.Object do
       values ->
         resolve_siblings(values)
     end
-    ##|> build_riak_context
   end
 
   defp statebox_timestamp_key(key) do
@@ -243,13 +242,10 @@ defmodule Ecto.Adapters.Riak.Object do
 
   defp validate_entity(entity) do
     ## checks that all fields needed for Riak 
-    ## migrations are defined    
-
+    ## migrations are defined
     cond do
-      ! function_exported?(entity, :id, 0) ->
-        raise_required_field_error(:id, entity)
-      entity.id == nil || size(entity.id) == 0 ->
-        raise_required_field_error(:id, entity)
+      entity.primary_key == nil || size(entity.primary_key) == 0 ->
+        raise_required_field_error(:primary_key, entity)
       ! function_exported?(entity, :riak_version, 0) ->
         raise_required_field_error(:riak_version, entity)
       ! is_integer(entity.riak_version) ->

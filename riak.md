@@ -1,87 +1,57 @@
 # Ecto with Riak Support
 
-The `riak` branch of the ecto repo implements support for the Riak Adapter.
+The Riak Adapter implements a subset of the Ecto API, and allows interfacing with a riak cluster.
+
+You should consider this **ALPHA** software until Riak 2.0 is officially released, where we can build the adapter with stable assumptions on how Riak handles search indexes and bucket types.
 
 ## Requirements
 
 At present, you will need either:
 
-* Riak 1.4 with Yokozuna installed
+* Riak 1.4 with Yokozuna 0.11 installed
 * Riak 2.0pre5
 
-The current implementation uses regular Riak objects with statebox. Eventually, we will look to use CRDTs, which are only going to be available with Riak 2.0 and higher.
+Note that this WILL NOT work with Yokozuna 0.12 and above. (Riak 2.0pre5 comes with Yokozuna 0.11)
 
-## Architecture
+## Usage Differences
 
-Say we have the following models:
+Each model MUST use `Ecto.RiakModel` instead of `Ecto.Model`.
 
-```elixir
-defmodule Post do
-  use Ecto.Model
 
-  queryable "posts" do
-    field :title, :string
-    field :text, :string
-    field :temp, :virtual, default: "temp"
-    field :count, :integer
-    has_many :comments, Comment
-    has_one :permalink, Permalink
-  end
-end
 
-defmodule Comment do
-  use Ecto.Model
+See the examples below.
 
-  queryable "comments" do
-    field :text, :string
-    field :posted, :datetime
-    field :interval, :interval
-    field :bytes, :binary
-    belongs_to :post, Post
-  end
-end
+## Query
 
-defmodule Permalink do
-  use Ecto.Model
+Query follows the same semantics as the Postgres adapter. With the follow exceptions:
 
-  queryable "permalinks" do
-    field :url, :string
-    belongs_to :post, Post
-  end
-end
-```
+* **JOINs are not supported**
 
-A post object would be transformed to a riak map in the straightforward fashion pseudo-structure.
+    This runs extremely counter to Riak's semantics, and has not been implemented at present. Even if an implementation is possible, it may not be very efficient.
 
-```
-{
-    "id":  1,
-    "title": "some title",
-    "text": "some source text",
-    "count": 1
-}
-```
+* **Transactions are not supported**
 
-A comment object would be transformed to a riak map in the pseudo-structure:
+     Riak has no native notion of a transaction. The only way to to implement some notion of transactions would be to map over each operation, read the existing value (if any), update the value, and manually revert the value (with proper error handling).
 
-```
-{
-    "id": 1,
-    "text": "some text",
-    "posted": "2014-01-01T01:01:01Z",
-    "interval":  "2014-01-01T01:01:01Z",
-    "bytes": "some binary",
-    "post_id": some_post_pk
-}
-```
+    This is a fragile operation which has no means of generic handling semantics, and it will be left up to the developer to initiate individual operations for now.
 
-Essentially, any association will require that we store the owner id on any `belongs_to` attribute
+* **Only uses Ecto.Query.API**
 
-### Query
+    The Riak Adapter will ignore additional `query_api`s other than Ecto.Query.API
 
-Querying will be achieved via standard gets when possible and delegate the heavy lifting to liberal use of Riak Search. This will require the version of search which comes in Riak 2.0
+* **Limited Query API support**
 
-## Major Differences from Ecto master
+    The list of UNSUPPORTED functions are:
+    
+    * ilike
+
+## Migrations
+
+Riak has no native notion of schema migrations. Instead, migrations are run lazily as data is read and updated.
+
+See the [Migrations Documentation for details](/lib/ecto/adapters/riak/migrations.md).
+
+## Other Major Differences from Ecto master
 
 1. **Added pooler dependency**
 
@@ -91,34 +61,7 @@ Querying will be achieved via standard gets when possible and delegate the heavy
 
 2. **Repo url() callback now can return either a single string, or a list of strings**
 
-    if the riak adapter is being used, and if a list of ecto URLs are supplied, the client should then attempt to connect to all of them. The username and password part of the URL will be ignored for now, until Riak introduces some notion of [ACLs (which are in the works)](https://github.com/basho/riak/issues/355). 
-
-    The postgres adapter **must** only be supplied a single URL.
-
-3. **JOINs are not allowed in queries**
-
-    This runs extremely counter to Riak's semantics, and has not been implemented at present. Even if an implementation is possible, it may not be very efficient.
-
-4. **There is no implementation for Transactions**
-
-    Riak has no native notion of a transaction. The only way to to implement some notion of transactions would be to map over each operation, read the existing value (if any), update the value, and manually revert the value (with proper error handling).
-
-    This is a fragile operation which has no means of generic handling semantics, and it will be left up to the developer to initiate individual operations for now.
-
-5. **Migrations are Lazy**
-
-    Riak has no native notion of schema migrations. Instead, migrations are run lazily as data is read and updated.
-    See the (Migrations Documentation)["/lib/ecto/adapters/riak/migrations.md"] for more details
-
-6. **Only uses Ecto.Query.API**
-
-    The Riak Adapter will ignore additional `query_api`s other than Ecto.Query.API
-
-7. **Limited Query API support**
-
-    Unsupported functions:
-    
-    * ilike
+    if the riak adapter is being used, and if a list of ecto URLs are supplied, the client should then attempt to connect to all of them. The username and password part of the URL will be ignored for now. (Potentially until Riak introduces some notion of [ACLs](https://github.com/basho/riak/issues/355)).
 
 8. **repo update_all/3 callback does not allow update expression**
 
@@ -131,6 +74,69 @@ Querying will be achieved via standard gets when possible and delegate the heavy
     
     ```
 
+## Example
+
+Say we have the following models:
+
+```elixir
+defmodule Post do
+  use Ecto.RiakModel
+
+  queryable "posts" do
+    field :title, :string
+    field :text, :string
+    field :temp, :virtual, default: "temp"
+    field :count, :integer
+    field :riak_version, :integer, default: 0
+    has_many :comments, Comment
+    has_one :permalink, Permalink
+  end
+
+  def version(), do: 0
+
+  def migrate_from_previous(entity), do: entity
+  
+  def migrate_from_newer(entity) do
+  end
+end
+
+defmodule Comment do
+  use Ecto.RiakModel
+
+  queryable "comments" do
+    field :text, :string
+    field :posted, :datetime
+    field :interval, :interval
+    field :bytes, :binary
+    field :riak_version, :integer, default: 0
+    belongs_to :post, Post
+  end
+
+  def version(), do: 0
+
+  def migrate_from_previous(entity), do: entity
+  
+  def migrate_from_newer(entity) do
+  end
+end
+
+defmodule Permalink do
+  use Ecto.RiakModel
+
+  queryable "permalinks" do
+    field :url, :string
+    field :riak_version, :integer, default: 0
+    belongs_to :post, Post
+  end
+
+  def version(), do: 0
+
+  def migrate_from_previous(entity), do: entity
+  
+  def migrate_from_newer(entity) do
+  end
+end
+```
 
 ## TODO
 

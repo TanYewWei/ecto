@@ -61,8 +61,7 @@ defmodule Ecto.Adapters.Riak do
 
         ## Setup search indexes for all models.
         ## This will require us to wait until pooler
-        ## is ready to accept connections.
-
+        ## is ready to accept connections
         setup_search_indexes = fn ->
           failures = use_worker(repo, &Search.search_index_reload_all(&1))
             |> Enum.filter(fn { _, res } -> res != :ok end)
@@ -129,14 +128,12 @@ defmodule Ecto.Adapters.Riak do
     query = Util.normalize(query)
     { query_tuple, post_proc_fun } = Search.query(query)
     { _, _, querystring, _ } = query_tuple
-    #IO.puts("riak all: #{inspect query_tuple}")
     
     if String.strip(querystring) == "" do
       []
     else
       case use_worker(repo, &Search.execute(&1, query_tuple, post_proc_fun)) do
         entities when is_list(entities) ->
-          #IO.puts("riak all entities: #{inspect entities}")
           entities
           |> Ecto.Associations.Assoc.run(query)
           |> preload(repo, query)

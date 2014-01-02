@@ -2,7 +2,6 @@ defmodule Ecto.Integration.Riak.MigrationTest do
   use Ecto.Integration.Riak.Case, async: false
 
   import Ecto.Integration.Riak.Util
-  alias Ecto.Adapters.Riak.Object
   alias Ecto.Adapters.Riak.Migration
   alias Ecto.Adapters.Riak.ETS
   alias Ecto.Adapters.Riak.Search
@@ -26,7 +25,11 @@ defmodule Ecto.Integration.Riak.MigrationTest do
 
     def migrate_from_newer(entity) do
       attr = RiakUtil.entity_keyword(entity)
-      attr = Keyword.put(attr, :integer, Float.round(entity.int))
+      attr = Keyword.put(attr, :integer, if nil?(entity.int) do
+                                           nil
+                                         else
+                                           Float.floor(entity.int)
+                                         end)
       __MODULE__.new(attr)
     end
   end
@@ -49,7 +52,12 @@ defmodule Ecto.Integration.Riak.MigrationTest do
     end
 
     def migrate_from_newer(entity) do
-      attr = [int: if(nil?(entity.int), do: Float.floor(entity.int), else: nil)]
+      attr = RiakUtil.entity_keyword(entity)
+      attr = Keyword.put(attr, :int, if nil?(entity.int) do
+                                       nil
+                                     else
+                                       Float.floor(entity.int)
+                                     end)
       __MODULE__.new(attr)
     end
   end
@@ -86,6 +94,8 @@ defmodule Ecto.Integration.Riak.MigrationTest do
   ## -----------------------------------------------------------------
 
   setup_all do
+    IO.puts "Running migration tests"
+    
     { :ok, socket } = RiakSocket.start_link('127.0.0.1', 8000)
     bucket = RiakUtil.bucket(Model0)
     
@@ -113,7 +123,6 @@ defmodule Ecto.Integration.Riak.MigrationTest do
   test "migrate up" do
     ## Single version migrate
     e0 = TestRepo.create(Model0.Entity[integer: 9])
-    #IO.puts("e0: #{inspect e0}")
     Migration.set_current_version(e0, 1)
     e1 = wait_assert Model1.Entity[] = TestRepo.get(Model0, e0.id)
     assert e1.riak_version == 1
@@ -126,7 +135,6 @@ defmodule Ecto.Integration.Riak.MigrationTest do
     e0 = TestRepo.create(Model0.Entity[integer: 10])
     Migration.set_current_version(e0, 2)
     e2 = wait_assert Model2.Entity[] = TestRepo.get(Model0, e0.id)
-    IO.puts("e2: #{inspect e2}")
     assert e2.riak_version == 2
     assert e2.id == e0.id
     assert is_float(e2.int)
@@ -154,7 +162,6 @@ defmodule Ecto.Integration.Riak.MigrationTest do
     e1 = TestRepo.create(Model1.Entity[int: 9, float: 1.0])
     Migration.set_current_version(e1, 0)
     e0 = wait_assert Model0.Entity[] = TestRepo.get(Model1, e1.id)
-    IO.puts("e0: #{inspect e0}")
     assert e0.riak_version == 0
     assert is_integer(e0.integer)
     assert e0.integer == e1.int
@@ -165,7 +172,7 @@ defmodule Ecto.Integration.Riak.MigrationTest do
     e0 = wait_assert Model0.Entity[] = TestRepo.get(Model2, e2.id)
     assert e0.riak_version == 0
     assert is_integer(e0.integer)
-    assert e0.integer == Float.round(e2.int)
+    assert e0.integer == Float.floor(e2.int)
   end  
 
 end
