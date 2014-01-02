@@ -321,33 +321,29 @@ defmodule Ecto.Integration.Riak.RepoTest do
     assert nil = c3.post.get
   end
 
-  # test "preload nested" do
-  #   p1 = TestRepo.create(Post.Entity[title: "1"])
-  #   p2 = TestRepo.create(Post.Entity[title: "2"])
+  test "preload nested" do
+    p1 = TestRepo.create(Post.Entity[title: "1"])
+    p2 = TestRepo.create(Post.Entity[title: "2"])
 
-  #   c1 = TestRepo.create(Comment.Entity[text: "1", post_id: p1.id])
-  #   c2 = TestRepo.create(Comment.Entity[text: "2", post_id: p1.id])
-  #   c3 = TestRepo.create(Comment.Entity[text: "3", post_id: p2.id])
-  #   c4 = TestRepo.create(Comment.Entity[text: "4", post_id: p2.id])
+    c1 = TestRepo.create(Comment.Entity[text: "1", post_id: p1.id])
+    c2 = TestRepo.create(Comment.Entity[text: "2", post_id: p1.id])
+    c3 = TestRepo.create(Comment.Entity[text: "3", post_id: p2.id])
+    c4 = TestRepo.create(Comment.Entity[text: "4", post_id: p2.id])
     
-  #   query = from(p in Post,
-  #                where: p.id in [^p1.id, ^p2.id],
-  #                order_by: [asc: p.title],
-  #                preload: [comments: :post])
-  #   [p1, p2] =
-  #     wait_assert [Post.Entity[], Post.Entity[]] =
-  #     TestRepo.all(query)
-  #   p1_comment_ids = p1.comments.to_list |> Enum.map(&(&1.id))
-  #   p2_comment_ids = p2.comments.to_list |> Enum.map(&(&1.id))
-  #   assert c1.id in p1_comment_ids
-  #   assert c2.id in p1_comment_ids
-  #   assert c3.id in p2_comment_ids
-  #   assert c4.id in p2_comment_ids
-  #   assert p1.id == c1.post.get.id
-  #   assert p1.id == c2.post.get.id
-  #   assert p2.id == c3.post.get.id
-  #   assert p2.id == c4.post.get.id
-  # end
+    query = from(p in Post,
+                 where: p.id in [^p1.id, ^p2.id],
+                 order_by: [asc: p.title],
+                 preload: [comments: [:post]])
+    [p1, p2] =
+      wait_assert [Post.Entity[], Post.Entity[]] =
+      TestRepo.all(query)
+    assert [c1, c2] = p1.comments.to_list
+    assert [c3, c4] = p2.comments.to_list
+    assert p1.id == c1.post.get.id
+    assert p1.id == c2.post.get.id
+    assert p2.id == c3.post.get.id
+    assert p2.id == c4.post.get.id
+  end
 
   test "preload keyword query" do
     p1 = TestRepo.create(Post.Entity[title: "1"])
