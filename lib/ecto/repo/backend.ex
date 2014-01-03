@@ -40,8 +40,7 @@ defmodule Ecto.Repo.Backend do
     case adapter.all(repo, query) do
       [entity] -> entity
       [] -> nil
-      rsn -> IO.puts "failed: #{inspect rsn}, query: #{inspect query})}"
-             raise Ecto.NotSingleResult, entity: entity
+      _  -> raise Ecto.NotSingleResult, entity: entity
     end
   end
 

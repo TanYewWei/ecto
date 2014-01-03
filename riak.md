@@ -45,7 +45,7 @@ Query follows the same semantics as the Postgres adapter. With the follow except
 
 Riak has no native notion of schema migrations. Instead, migrations are run lazily as data is read and updated.
 
-See the [Migrations Documentation for details](/lib/ecto/adapters/riak/migrations.md).
+See the [Migrations Documentation for details][migration].
 
 ## Other Major Differences from Ecto master
 
@@ -75,4 +75,4 @@ See the [Migrations Documentation for details](/lib/ecto/adapters/riak/migration
 * Allow for migration config file specifying versions of various models
 
 
-[migration]: /lib/ecto/adapters/migrations.md
+[migration]: /lib/ecto/adapters/riak/migrations.md
