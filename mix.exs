@@ -22,7 +22,10 @@ defmodule Ecto.Mixfile do
 
   defp deps(:prod) do
     [ { :poolboy, github: "devinus/poolboy" },
-      { :postgrex, "~> 0.3.0", github: "ericmj/postgrex", optional: true } ]
+      { :postgrex, "~> 0.3.0", github: "ericmj/postgrex", optional: true },
+     
+      ## Riak dependencies
+      { :ecto_riak, path: "../ecto_riak", optional: true } ]
   end
 
   defp deps(_) do
@@ -32,6 +35,7 @@ defmodule Ecto.Mixfile do
 
   defp envs do
     [ pg: [ test_paths: ["integration_test/pg"] ],
+      riak: [ test_paths: ["integration_test/riak"] ],
       all: [ test_paths: ["test", "integration_test/pg"] ] ]
   end
 end

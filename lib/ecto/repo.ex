@@ -123,7 +123,7 @@ defmodule Ecto.Repo do
   where the `password`, `port` and `options` are optional. This function must be
   implemented by the user.
   """
-  defcallback url() :: String.t
+  defcallback url() :: String.t | [String.t]
 
   @doc """
   Starts any connection pooling or supervision and return `{ :ok, pid }`

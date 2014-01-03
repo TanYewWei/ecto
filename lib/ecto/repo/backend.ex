@@ -40,7 +40,8 @@ defmodule Ecto.Repo.Backend do
     case adapter.all(repo, query) do
       [entity] -> entity
       [] -> nil
-      _ -> raise Ecto.NotSingleResult, entity: entity
+      rsn -> IO.puts "failed: #{inspect rsn}, query: #{inspect query})}"
+             raise Ecto.NotSingleResult, entity: entity
     end
   end
 
@@ -99,10 +100,13 @@ defmodule Ecto.Repo.Backend do
     adapter.transaction(repo, fun)
   end
 
-  ## Helpers
+  ## Helpers  
 
-  defp parse_url(url) do
-  
+  defp parse_url(urls) when is_list(urls) do
+    Enum.map(urls, &parse_url/1)
+  end
+
+  defp parse_url(url) do  
     unless url =~ %r/^[^:\/?#\s]+:\/\// do
       raise Ecto.InvalidURL, url: url, reason: "url should start with a scheme, host should start with //"
     end
@@ -129,7 +133,7 @@ defmodule Ecto.Repo.Backend do
     if info.port, do: opts = [port: info.port] ++ opts
 
     opts ++ query
-  end
+  end  
 
   defp atomize_keys(dict) do
     Enum.map dict, fn({ k, v }) -> { binary_to_atom(k), v } end

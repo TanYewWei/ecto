@@ -229,12 +229,23 @@ defmodule Ecto.Entity do
       @ecto_fields []
       @record_fields []
       @ecto_primary_key nil
+      @ecto_foreign_key_type opts[:foreign_key_type]
       Module.register_attribute(__MODULE__, :ecto_assocs, accumulate: true)
 
       @ecto_foreign_key_type opts[:foreign_key_type]
 
       @ecto_model opts[:model]
       field(:model, :virtual, default: opts[:model])
+
+      ## Default fields
+      Enum.map(opts[:default_fields] || [], fn field ->
+        case field do
+          { name, type, opts } ->
+            field(name, type, opts)
+          other ->
+            raise ArgumentError, message: ":default_fields must contain { name, type, opts } tuples"
+        end
+      end)
 
       case opts[:primary_key] do
         nil ->
