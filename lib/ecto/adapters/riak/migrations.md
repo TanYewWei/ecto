@@ -53,20 +53,22 @@ migrate_from_newer(entity) :: entity
 Here is an example of two versions of the same model
 
 ```elixir
-defmodule My.Great.Model do
+defmodule Model.Post do
   @behaviour Ecto.Adapters.Riak.Migration
 
   use Ecto.RiakModel
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
-  require Ecto.Adapters.Riak.Validators, as: RiakValidate
 
-  queryable "models" do
-    field :riak_version, :integer, default: 1
+  queryable "model.posts" do  ## queryable source determines the bucket to put to in riak
+    field :title, :string
     field :hello, :string
+    has_many :comments, Model.Comment
+    has_one :permalink, Model.Permalink
+    field :riak_version, :integer, default: 1
 
     ## Default validation
-    ## checks for :id and :version fields
-    RiakValidate.validate()
+    ## checks for :id and :riak_version fields
+    riak_validate model
   end
 
   def version(), do: 1
@@ -82,7 +84,6 @@ defmodule My.Great.Model do
     ## Call a Riak Adapter utility function to extract entity fields
     ## as a keyword: [ id: "hello", version: 1, ... ]
     attr = RiakUtil.entity_keyword(entity)
-      |> Keyword.put(:version, version)
 
     ## Map back the :hello field
     attr = Keyword.put(attr, :hello, entity.world)
@@ -94,24 +95,26 @@ end
 ```
 
 ```elixir
-defmodule My.Great.Model.Version2 do
+defmodule Model.Post.Version2 do
   @behaviour Ecto.Adapters.Riak.Migration
 
   use Ecto.RiakModel
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
-  require Ecto.Adapters.Riak.Validators, as: RiakValidate
 
-  queryable "models" do
-    field :riak_version, :integer, default: 2
-    field :world, :string
+  queryable "model.posts" do
+    field :title, :string
+    filed :world, :string
     field :some_list, { :list, :string }
+    has_many :comments, Model.Comment
+    has_one :permalink, Model.Permalink
+    field :riak_version, :integer, default: 2
 
     ## Checks for :version and :id fields
     ## along with whatever other fields are provided through
     ## a keyword list. Note that 
-    RiakValidate.validate(
+    riak_validate model,
       world: has_format(%r/Happy/, message: "why aren't you happy!!"),
-      also:  validate_some_list)
+      also:  validate_some_list
 
     validatep validate_some_list(x),
       some_list: present(message: "give me a list!")
@@ -123,7 +126,7 @@ defmodule My.Great.Model.Version2 do
     ## Called during migration upgrade from version 1 to 2
     attr = RiakUtil.entity_keyword(entity)
 
-    ## Perform arbitrary transformation on the original :hello field
+    ## Perform arbitrary transformation on previous entity version fields
     attr = Keyword.put(attr, :world, "#{entity.hello}, Weeee!")
     __MODULE__.new(attr)
   end
@@ -140,10 +143,78 @@ defmodule My.Great.Model.Version2 do
 end
 ```
 
+```elixir
+defmodule Model.Comment do
+  use Ecto.RiakModel
+
+  queryable "model.comments" do
+    field :text, :string
+    field :posted, :datetime
+    field :interval, :interval
+    field :bytes, :binary
+    field :riak_version, :integer, default: 0
+    belongs_to :post, Model.Post
+  end
+
+  def version(), do: 0
+  def migrate_from_previous(x), do: x
+  def migrate_from_newer(x), do: x
+end
+```
+
+```elixir
+defmodule Model.Permalink do
+  use Ecto.RiakModel
+
+  queryable "model.permalinks" do
+    field :url, :string
+    field :riak_version, :integer, default: 0
+    belongs_to :post, Ecto.Test.Riak.Post
+  end
+
+  def version(), do: 0
+  def migrate_from_previous(x), do: x
+  def migrate_from_newer(x), do: x
+end
+```
+
+```elixir
+defmodule TestRepo do
+  use Ecto.Repo, adapter: Ecto.Adapters.Riak
+
+  def priv do
+    "integration_test/riak/ecto/priv"
+  end
+
+  def url do
+    [ "ecto://test@127.0.0.1:8000/test?max_count=10&init_count=1",
+      "ecto://test@127.0.0.1:8001/test?max_count=10&init_count=1",
+      "ecto://test@127.0.0.1:8002/test?max_count=10&init_count=1" ]
+  end
+
+  def query_apis do
+    ## only default is allowed
+    [ Ecto.Query.API ]
+  end
+end
+```
+
 ## Migration Process
 
 A migration is attempted every time an entity is read from the database.
 
 ```elixir
+{ :ok, _ } = TestRepo.start_link
+
+## Create a new entity and save it to Riak
+m0 = TestRepo.create(Model.Post.Entity[title: "hello", hello: "world"])
+
+## Set new version for model
+:ok = Ecto.Adapters.Riak.Migration.set_current_version(m0, 2)
+
+## Read model, which should have been migrated over
+m1 = TestRepo.get(Model.Post, m0.primary_key)
+2 = m1.riak_version
+m0.hello = m1.world
 
 ```

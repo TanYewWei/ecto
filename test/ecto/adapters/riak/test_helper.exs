@@ -1,7 +1,7 @@
 defmodule Ecto.Test.Riak.Post do
   use Ecto.RiakModel
 
-  queryable "posts" do
+  queryable "ecto.test.riak.posts" do
     field :title, :string
     field :text, :string
     field :posted, :datetime
@@ -21,7 +21,7 @@ end
 defmodule Ecto.Test.Riak.Comment do
   use Ecto.RiakModel
 
-  queryable "comments" do
+  queryable "ecto.test.riak.comments" do
     field :text, :string
     field :posted, :datetime
     field :interval, :interval
@@ -39,7 +39,7 @@ end
 defmodule Ecto.Test.Riak.Permalink do
   use Ecto.RiakModel
 
-  queryable "permalinks" do
+  queryable "ecto.test.riak.permalinks" do
     field :url, :string
     field :riak_version, :integer, default: 0
     belongs_to :post, Ecto.Test.Riak.Post
@@ -53,7 +53,7 @@ end
 defmodule Ecto.Test.Riak.User do
   use Ecto.RiakModel
 
-  queryable "users" do
+  queryable "ecto.test.riak.users" do
     field :name, :string
     field :riak_version, :integer, default: 0
     has_many :comments, Ecto.Test.Riak.Comment
@@ -67,7 +67,7 @@ end
 defmodule Ecto.Test.Riak.Custom do
   use Ecto.RiakModel
 
-  queryable "customs", primary_key: false do
+  queryable "ecto.test.riak.customs", primary_key: false do
     field :foo, :string, primary_key: true
     field :riak_version, :integer, default: 0
   end

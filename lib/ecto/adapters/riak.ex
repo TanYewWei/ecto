@@ -141,7 +141,7 @@ defmodule Ecto.Adapters.Riak do
           []
       end
     end
-  end  
+  end
 
   defp preload(results, repo, Query[] = query) do
     pos = Util.locate_var(query.select.expr, { :&, [], [0] })

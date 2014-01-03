@@ -156,7 +156,45 @@ defmodule Ecto.Adapters.Riak.Search do
   returning a list of valid entities (or an empty list)
   """
   @spec execute(pid, query_tuple, post_proc_fun) :: [entity]
+
   def execute(worker, query_tuple, post_proc_fun) do
+    if is_get?(query_tuple) do
+      execute_get(worker, query_tuple)
+    else
+      execute_search(worker, query_tuple, post_proc_fun)
+    end
+  end
+
+  defp is_get?(query_tuple) do
+    ## returns true if the query is intended to only
+    ## get a single riak object
+    { _, _, querystring, opts } = query_tuple
+    case Regex.split(%r":", querystring) do
+      [k, v] when is_binary(k) and is_binary(v) and k != "*" and v != "*" ->
+        String.ends_with?(k, "_s") &&
+          Keyword.get(opts, :rows) == 1
+      _ ->
+        false
+    end
+  end
+
+  defp execute_get(worker, query_tuple) do
+    { _, bucket, querystring, _ } = query_tuple
+    
+    [_, key] = Regex.split(%r":", querystring)
+    key = String.strip(key, hd ')')
+    
+    case RiakSocket.get(worker, bucket, key) do
+      { :ok, object } ->        
+        entity = Object.object_to_entity(object)
+          |> Migration.migrate
+        [entity]
+      _ ->
+        []
+    end
+  end
+
+  defp execute_search(worker, query_tuple, post_proc_fun) do
     { search_index, _, querystring, opts } = query_tuple
     case RiakSocket.search(worker, search_index, querystring, opts) do      
       ## -----------------
@@ -169,15 +207,15 @@ defmodule Ecto.Adapters.Riak.Search do
         ## the riak object key to a list of stateboxes which
         ## can be used for sibling resolution
         doc_dict = Enum.reduce(search_docs, HashDict.new, fn x, acc ->
-            case parse_search_result(x) do
-              { key, json } ->
-                box = Object.resolve_to_statebox(json)
-                fun = &([box | &1])
-                HashDict.update(acc, key, [box], fun)
-              _ ->
-                acc
-            end
-          end)
+          case parse_search_result(x) do
+            { key, json } ->
+              box = Object.resolve_to_statebox(json)
+              fun = &([box | &1])
+              HashDict.update(acc, key, [box], fun)
+            _ ->
+              acc
+          end
+        end)
 
         ## Use doc_dict to resolve any duplicates (riak siblings).
         ## The resulting list is a list of entity objects
@@ -194,8 +232,8 @@ defmodule Ecto.Adapters.Riak.Search do
       
       ## -------------
       ## unknown error
-      rsn ->
-        rsn
+      _ ->
+        []
     end
   end
 

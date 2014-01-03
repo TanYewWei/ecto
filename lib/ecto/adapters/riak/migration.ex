@@ -312,9 +312,10 @@ defmodule Ecto.Adapters.Riak.Migration do
   end 
 
   @doc """
-  Sets the latest version of an entity to server state.
-  This gets called 
+  Sets the version of an entity. Any entities with a non-corresponding
+  version will be migrated (if migration in direction is enabled)
   """
+  @spec set_current_version(entity, integer) :: :ok | { :error, term }
   def set_current_version(entity, version) do
     key = RiakUtil.bucket(entity) <> "_ver"
     ETS.put(key, version)

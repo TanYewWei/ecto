@@ -21,6 +21,7 @@ defmodule Ecto.RiakModel do
        
       @behaviour Ecto.Adapters.Riak.Migration
       use Ecto.Model
+      import Ecto.Adapters.Riak.Validators
     end
   end
 

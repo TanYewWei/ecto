@@ -9,7 +9,7 @@ defmodule Ecto.Adapters.Riak.ETS do
     end
   end
 
-  @spec put(term, term) :: :ok | {:error, term}
+  @spec put(term, term) :: :ok | { :error, term }
   def put(key, val) do
     case :ets.insert(@table_name, { key, val }) do
       true -> :ok

@@ -13,13 +13,9 @@ At present, you will need either:
 
 Note that this WILL NOT work with Yokozuna 0.12 and above. (Riak 2.0pre5 comes with Yokozuna 0.11)
 
-## Usage Differences
+## Usage
 
-Each model MUST use `Ecto.RiakModel` instead of `Ecto.Model`.
-
-
-
-See the examples below.
+See the examples in the [Migration Documentation][migration] for full usage examples.
 
 ## Query
 
@@ -74,72 +70,9 @@ See the [Migrations Documentation for details](/lib/ecto/adapters/riak/migration
     
     ```
 
-## Example
-
-Say we have the following models:
-
-```elixir
-defmodule Post do
-  use Ecto.RiakModel
-
-  queryable "posts" do
-    field :title, :string
-    field :text, :string
-    field :temp, :virtual, default: "temp"
-    field :count, :integer
-    field :riak_version, :integer, default: 0
-    has_many :comments, Comment
-    has_one :permalink, Permalink
-  end
-
-  def version(), do: 0
-
-  def migrate_from_previous(entity), do: entity
-  
-  def migrate_from_newer(entity) do
-  end
-end
-
-defmodule Comment do
-  use Ecto.RiakModel
-
-  queryable "comments" do
-    field :text, :string
-    field :posted, :datetime
-    field :interval, :interval
-    field :bytes, :binary
-    field :riak_version, :integer, default: 0
-    belongs_to :post, Post
-  end
-
-  def version(), do: 0
-
-  def migrate_from_previous(entity), do: entity
-  
-  def migrate_from_newer(entity) do
-  end
-end
-
-defmodule Permalink do
-  use Ecto.RiakModel
-
-  queryable "permalinks" do
-    field :url, :string
-    field :riak_version, :integer, default: 0
-    belongs_to :post, Post
-  end
-
-  def version(), do: 0
-
-  def migrate_from_previous(entity), do: entity
-  
-  def migrate_from_newer(entity) do
-  end
-end
-```
-
 ## TODO
 
-* We depend on a single ETS table to track migration information. Ideally, this should have one ETS table per repo
+* Allow for migration config file specifying versions of various models
 
-* Optimize a query which is definitely only going to return a single object to a simple Riak.get request
+
+[migration]: /lib/ecto/adapters/migrations.md

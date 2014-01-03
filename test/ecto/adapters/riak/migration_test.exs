@@ -1,7 +1,6 @@
 alias Ecto.Adapters.Riak.Datetime
 alias Ecto.Adapters.Riak.Util, as: RiakUtil
 alias Ecto.Adapters.Riak.Object
-require Ecto.Adapters.Riak.Validators, as: RiakValidate
 
 ## ----------------------------------------------------------------------
 ## Model Definitions
@@ -35,8 +34,9 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model do
     field :hello,    :virtual
     field :riak_version, :integer, default: 0
 
-    RiakValidate.validate(float: present,
-                          also: validate_some_thing)
+    riak_validate model,
+      float: present,
+      also: validate_some_thing
 
     validatep validate_some_thing(x),
       datetime: present(message: "failed validate!")
