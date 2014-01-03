@@ -1,5 +1,7 @@
 # Ecto
 
+**NOTE**: this is a fork of ecto with significant changes to implement an adapter for the Riak Database. See[the `riak.md` file](/riak.md) for more information.
+
 [![Build Status](https://travis-ci.org/elixir-lang/ecto.png?branch=master)](https://travis-ci.org/elixir-lang/ecto)
 
 Ecto is a domain specific language for writing queries and interacting with databases in Elixir. Here is an example:

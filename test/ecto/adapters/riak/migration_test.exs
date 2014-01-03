@@ -158,9 +158,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Version2 do
     attr = Keyword.put(attr, :binary, entity.binary |> :base64.encode)
 
     ## ignore :datetime, :interval, and :virtual fields
-    attr = Keyword.delete(attr, :datetime)
-    attr = Keyword.delete(attr, :interval)
-    attr = Keyword.delete(attr, :virtual)
+    attr = Keyword.drop(attr, [:datetime, :interval, :virtual])
     
     ## DONE
     __MODULE__.new(attr)

@@ -8,7 +8,7 @@ defmodule Ecto.Adapters.Riak.JSON do
     :jiffy.decode(x)
   end
 
-  def get({ inner } = json, key, default // nil) when is_binary(key) do
+  def get({ inner }, key, default // nil) when is_binary(key) do
     Dict.get(inner, key, default)
   end
 

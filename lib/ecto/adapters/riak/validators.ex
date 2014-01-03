@@ -8,7 +8,7 @@ defmodule Ecto.Adapters.Riak.Validators do
 
   defmacro riak_validate(x) do
     quote do
-      riak_validate(x, [])
+      riak_validate(unquote(x), [])
     end
   end
 
