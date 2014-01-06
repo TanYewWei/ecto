@@ -74,5 +74,4 @@ See the [Migrations Documentation for details][migration].
 
 * Allow for migration config file specifying versions of various models
 
-
 [migration]: /lib/ecto/adapters/riak/migrations.md

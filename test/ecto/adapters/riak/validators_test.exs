@@ -1,6 +1,5 @@
 defmodule Ecto.Adapters.Riak.ValidatorsTest do
   use ExUnit.Case, async: true
-  #require Ecto.Adapters.Riak.Validators
 
   defmodule BadModel do
     use Ecto.RiakModel
@@ -39,9 +38,6 @@ defmodule Ecto.Adapters.Riak.ValidatorsTest do
   end
 
   test "bad models should not validate" do
-    m0 = BadModel.Entity[id: "some_id", integer: 1]
-    assert_raise UndefinedFunctionError, fn -> BadModel.validate(m0) end
-
     m1 = Model.Entity[id: 1, integer: 1, list: [1.0]]
     assert [primary_key: "is not a string"] == Model.validate(m1)
   end
