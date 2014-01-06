@@ -25,7 +25,7 @@ defmodule Ecto.Mixfile do
       { :postgrex, "~> 0.3.0", github: "ericmj/postgrex", optional: true },
      
       ## Riak dependencies
-      { :ecto_riak, path: "../ecto_riak", optional: true } ]
+      { :ecto_riak, github: "TanYewWei/ecto_riak", optional: true } ]
   end
 
   defp deps(_) do
