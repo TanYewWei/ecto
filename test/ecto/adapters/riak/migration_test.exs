@@ -32,7 +32,6 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model do
     field :interval, :interval
     field :virtual,  :virtual
     field :hello,    :virtual
-    field :riak_version, :integer, default: 0
 
     riak_validate model,
       float: present,
@@ -41,8 +40,6 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model do
     validatep validate_some_thing(x),
       datetime: present(message: "failed validate!")
   end
-
-  def version(), do: 0
   
   def migrate_from_previous(entity) do
     RiakUtil.entity_keyword(entity) |> __MODULE__.new
@@ -193,6 +190,28 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
   end
 
   ## ------------------------------------------------------------
+  ## Default Migration
+  ## ------------------------------------------------------------
+
+  test "default migration functions should be automatically declared" do
+    defmodule SparseModel do
+      use Ecto.RiakModel
+
+      queryable "sparse_models" do
+        field :string, :string
+      end
+    end
+    
+    m0 = SparseModel.new
+    assert ! function_exported?(m0.model, :version, 0)
+    assert ! function_exported?(m0.model, :migrate_from_previous, 1)
+    assert ! function_exported?(m0.model, :migrate_from_newer, 1)
+    assert function_exported?(m0.model, :version, 1)
+    assert function_exported?(m0.model, :migrate_from_previous, 2)
+    assert function_exported?(m0.model, :migrate_from_newer, 2)
+  end
+
+  ## ------------------------------------------------------------
   ## Migration Up
   ## ------------------------------------------------------------    
 
@@ -322,8 +341,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest do
                string: ["hello"],
                binary: "AAEC",
                datetime: Ecto.DateTime[year: 2000],
-               interval: Ecto.Interval[day: 1],
-               riak_version: 2)
+               interval: Ecto.Interval[day: 1])
       |> Object.create_primary_key
   end
 

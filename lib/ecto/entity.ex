@@ -294,16 +294,21 @@ defmodule Ecto.Entity do
       end
     end
 
-    clash = Enum.any?(fields, fn({ prev, _ }) -> name == prev end)
+    clash = Enum.any?(fields, fn { prev, opts } ->
+      name == prev && !Keyword.get(opts, :overridable?, false)
+    end)
     if clash do
       raise ArgumentError, message: "field `#{name}` was already set on entity"
     end
 
     record_fields = Module.get_attribute(mod, :record_fields)
-    Module.put_attribute(mod, :record_fields, record_fields ++ [{ name, opts[:default] }])
+    record_fields = Dict.delete(record_fields, name) ++ [{ name, opts[:default] }]
+    Module.put_attribute(mod, :record_fields, record_fields)
 
-    opts = Enum.reduce([:default, :primary_key], opts, &Dict.delete(&2, &1))
-    Module.put_attribute(mod, :ecto_fields, [{ name, [type: type] ++ opts }|fields])
+    opts = [type: type] ++
+      Enum.reduce([:default, :primary_key], opts, &Dict.delete(&2, &1))
+    fields = Dict.put(fields, name, opts)
+    Module.put_attribute(mod, :ecto_fields, fields)
   end
 
   @doc false

@@ -48,12 +48,15 @@ defmodule Ecto.Adapters.Riak.Migration do
   defcallback version() :: integer
 
   @doc """
-  Checks if a module implements the Ecto.Adapters.Riak.Migration behaviour
+  Checks if a module can be used in migration.
   """
   def is_migration_module?(module) do
-    function_exported?(module, :version, 1)
-    function_exported?(module, :migrate_from_previous, 1)
-    function_exported?(module, :migrate_from_newer, 1)
+    (function_exported?(module, :version, 0) ||
+     function_exported?(module, :version, 1)) &&
+    (function_exported?(module, :migrate_from_previous, 1) ||
+     function_exported?(module, :migrate_from_previous, 2)) &&
+    (function_exported?(module, :migrate_from_newer, 1) ||
+     function_exported?(module, :migrate_from_newer, 2))
   end
 
   ## ----------------------------------------------------------------------
@@ -162,7 +165,7 @@ defmodule Ecto.Adapters.Riak.Migration do
     ## Get relevant migration modules in ascending order
     modules = migration_modules(entity, version)
     List.foldl(modules, entity, fn module, ent ->
-      ent.riak_version(module.version)
+      ent.riak_version(model_version(module))
       |> module.migrate_from_previous
     end)
   end
@@ -172,7 +175,7 @@ defmodule Ecto.Adapters.Riak.Migration do
     ## Get relevant migration modules in descending order
     modules = migration_modules(entity, version)
     List.foldl(modules, entity, fn module, ent ->
-       ent.riak_version(module.version)
+       ent.riak_version(model_version(module))
        |> module.migrate_from_newer
     end)
   end
@@ -193,10 +196,14 @@ defmodule Ecto.Adapters.Riak.Migration do
     ## Upgrade
     modules = :code.all_loaded
       |> Enum.filter(fn { mod, _ } ->
-           is_migration_module?(mod)
-           && sibling_modules?(entity.model, mod)
-           && mod.version <= target
-           && mod.version > current
+           if is_migration_module?(mod) do
+             mod_ver = model_version(mod)
+             sibling_modules?(entity.model, mod)
+             && mod_ver <= target
+             && mod_ver > current
+           else
+             false
+           end
          end)
       |> Enum.map(fn { mod, _ } -> mod end)
 
@@ -204,7 +211,7 @@ defmodule Ecto.Adapters.Riak.Migration do
     migration_modules_deduplicate!(modules, entity, target)
     
     ## Sort in ascending order
-    Enum.sort(modules, fn m0, m1 -> m0.version < m1.version end)
+    Enum.sort(modules, fn m0, m1 -> model_version(m0) < model_version(m1) end)
   end
 
   defp migration_modules_worker(entity, current, target) when current > target do
@@ -213,10 +220,14 @@ defmodule Ecto.Adapters.Riak.Migration do
     #prefix = entity_prefix(entity.model)
     modules = :code.all_loaded
       |> Enum.filter(fn { mod, _ } ->
-           is_migration_module?(mod)
-           && sibling_modules?(entity.model, mod)
-           && mod.version >= target
-           && mod.version < current
+           if is_migration_module?(mod) do
+             mod_ver = model_version(mod)
+             sibling_modules?(entity.model, mod)
+             && mod_ver >= target
+             && mod_ver < current
+           else
+             false
+           end
          end)
       |> Enum.map(fn { mod, _ } -> mod end)
 
@@ -224,7 +235,7 @@ defmodule Ecto.Adapters.Riak.Migration do
     migration_modules_deduplicate!(modules, entity, target)
     
     ## Sort in descending order
-    Enum.sort(modules, fn m0, m1 -> m0.version > m1.version end)
+    Enum.sort(modules, fn m0, m1 -> model_version(m0) > model_version(m1) end)
   end
 
   defp sibling_modules?(m0, m1) when m0 == m1 do
@@ -261,7 +272,7 @@ defmodule Ecto.Adapters.Riak.Migration do
     ## and raises an error if so
     version_set = Enum.reduce(modules, HashSet.new, fn mod, acc ->
       try do
-        HashSet.put(acc, mod.version)
+        HashSet.put(acc, model_version(mod))
       rescue
         UndefinedFunctionError ->
           raise MigrationModulesException,
@@ -309,7 +320,15 @@ defmodule Ecto.Adapters.Riak.Migration do
       _ ->
         nil
     end
-  end 
+  end
+
+  defp model_version(module) do
+    if function_exported?(module, :version, 0) do
+      module.version
+    else
+      module.version(:default)
+    end
+  end
 
   @doc """
   Sets the version of an entity. Any entities with a non-corresponding
