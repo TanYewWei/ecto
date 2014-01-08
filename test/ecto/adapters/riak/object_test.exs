@@ -53,12 +53,14 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
     e0 = mock_post() |> Object.build_riak_context
     e1 = e0.title("test title 1").count(7)
     e2 = e0.rating(6)
+
+    selected = Object.entity_to_object(e2)
     
     j0 = Object.entity_to_object(e0) |> object_updatedvalue |> JSON.decode
     j1 = Object.entity_to_object(e1) |> object_updatedvalue |> JSON.decode
     j2 = Object.entity_to_object(e2) |> object_updatedvalue |> JSON.decode
     
-    entity = Object.resolve_siblings([ j0, j1, j2 ])
+    entity = Object.resolve_siblings([ j0, j1, j2 ], selected)
     assert entity.id == e0.id
     assert entity.title == e1.title
     assert entity.text == e0.text

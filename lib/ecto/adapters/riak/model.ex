@@ -20,6 +20,7 @@ defmodule Ecto.RiakModel do
         primary_key: { :id, :string, [] },
         foreign_key_type: :string,
         default_fields: [ { :riak_version, :integer, default: 0, overridable?: true },
+                          { :riak_vclock, :virtual, [] },
                           { :riak_context, :virtual, default: [] } ] ]
       
       use Ecto.Model

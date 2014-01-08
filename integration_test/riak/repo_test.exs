@@ -155,8 +155,8 @@ defmodule Ecto.Integration.Riak.RepoTest do
 
     query = from(p in Post, where: p.id == ^id1 or p.id == ^id2)
     wait_assert 2 = TestRepo.delete_all(query)
-    query = query |> where([p], p.id == ^id3)
-    wait_assert [p3] == TestRepo.all(query)
+    query = query |> where([p], p.id == ^id3) |> select([p], p.id)
+    wait_assert [ p3.id ] == TestRepo.all(query)
   end
 
   test "delete all entites" do
@@ -205,7 +205,11 @@ defmodule Ecto.Integration.Riak.RepoTest do
     end
     assert p1.comments.loaded? == false
 
-    ##wait_for_index
+    c1 = remove_virtual_fields(c1)
+    c2 = remove_virtual_fields(c2)
+    c3 = remove_virtual_fields(c3)
+    c4 = remove_virtual_fields(c4)
+
     query = from(p in Post,
                  where: p.id in [^p1.id, ^p2.id, ^p3.id],
                  order_by: p.title,
@@ -213,8 +217,8 @@ defmodule Ecto.Integration.Riak.RepoTest do
     [p1, p2, p3] =
       wait_assert [Post.Entity[], Post.Entity[], Post.Entity[]] =
       TestRepo.all(query)
-    p1_comments = p1.comments.to_list
-    p2_comments = p2.comments.to_list
+    p1_comments = p1.comments.to_list |> Enum.map(&remove_virtual_fields/1)
+    p2_comments = p2.comments.to_list |> Enum.map(&remove_virtual_fields/1)
     assert c1 in p1_comments
     assert c2 in p1_comments
     assert c3 in p2_comments
@@ -359,7 +363,13 @@ defmodule Ecto.Integration.Riak.RepoTest do
     wait_assert c3 == TestRepo.get(Comment, c3.id)
     wait_assert c4 == TestRepo.get(Comment, c4.id)
 
-    query = from(p in Post, 
+    ## Wipe virtual fields for comparisons
+    c1 = remove_virtual_fields(c1)
+    c2 = remove_virtual_fields(c2)
+    c3 = remove_virtual_fields(c3)
+    c4 = remove_virtual_fields(c4)
+
+    query = from(p in Post,
                  where: p.id in [^p1.id, ^p2.id, ^p3.id],
                  preload: [:comments],
                  order_by: p.title,
@@ -368,8 +378,8 @@ defmodule Ecto.Integration.Riak.RepoTest do
     [p1, p2, p3] =
       wait_assert [Post.Entity[], Post.Entity[], Post.Entity[]] =
       TestRepo.all(query)
-    p1_comments = p1.comments.to_list
-    p2_comments = p2.comments.to_list
+    p1_comments = p1.comments.to_list |> Enum.map(&remove_virtual_fields/1)
+    p2_comments = p2.comments.to_list |> Enum.map(&remove_virtual_fields/1)
     assert c1 in p1_comments
     assert c2 in p1_comments
     assert c3 in p2_comments
@@ -384,8 +394,8 @@ defmodule Ecto.Integration.Riak.RepoTest do
     posts = TestRepo.all(query)
     [p1, p2, p3] = Enum.map(posts, fn { 0, [p] } -> p end)
 
-    p1_comments = p1.comments.to_list
-    p2_comments = p2.comments.to_list
+    p1_comments = p1.comments.to_list |> Enum.map(&remove_virtual_fields/1)
+    p2_comments = p2.comments.to_list |> Enum.map(&remove_virtual_fields/1)
     assert c1 in p1_comments
     assert c2 in p1_comments
     assert c3 in p2_comments
@@ -394,9 +404,9 @@ defmodule Ecto.Integration.Riak.RepoTest do
   end
 
   test "row transform" do
-    post = TestRepo.create(Post.Entity[title: "1", text: "hi"])
-    query = from(p in Post, select: { p.title, [ p, { p.text } ] })    
-    wait_assert [{ "1", [ ^post, { "hi" } ] }] = TestRepo.all(query)
+    Post.Entity[] = TestRepo.create(Post.Entity[title: "1", text: "hi"])
+    query = from(p in Post, select: { p.title, [ { p.text } ] })
+    wait_assert [{ "1", [ { "hi" } ] }] = TestRepo.all(query)
   end   
 
   defp valid_id?(x) do
