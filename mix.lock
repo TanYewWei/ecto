@@ -1,7 +1,5 @@
-[ "ecto_riak": {:git, "git://github.com/TanYewWei/ecto_riak.git", "b59e3342e973315c4360dfc172a2dfa7e29b7f56", []},
-  "ej": {:git, "git://github.com/seth/ej.git", "0332523799fdbab4b7c8e87074dcf57bb15005a6", []},
-  "ex_doc": {:git, "git://github.com/elixir-lang/ex_doc.git", "0b31aab7c47eb571b9e889412fde4834d55ab8e5", []},
-  "iso8601": {:git, "git://github.com/seansawyer/erlang_iso8601.git", "132c440160d5ab11cfa9fe360ebe8e52a808cd7b", []},
+[ "ecto_riak": {:git, "git://github.com/TanYewWei/ecto_riak.git", "45e25e54cac65b6667f3fcf10396591d74ff7135", []},
+  "ex_doc": {:git, "git://github.com/elixir-lang/ex_doc.git", "516ed76112ee4c97793bf275282b57ddbb3a7092", []},
   "jiffy": {:git, "git://github.com/davisp/jiffy.git", "d16a4fd968e000b65e4678cccfad68d7a0a8bd1c", []},
   "meck": {:git, "git://github.com/basho/meck.git", "2b25a30a8688f94106d07f23a9f1fb523ac00f08", [{:tag, "0.8.1"}]},
   "poolboy": {:git, "git://github.com/devinus/poolboy.git", "c2c939b51aba06790ca51fa78b14c254a6ea977d", []},
@@ -9,6 +7,6 @@
   "postgrex": {:git, "git://github.com/ericmj/postgrex.git", "b7cc22ee67526baf56eca1eda54485ccfcd088db", []},
   "proper": {:git, "git://github.com/manopapad/proper", "c37cab86f5e9dd5c5e751248cf1566a5d4f9535c", [{:ref, "master"}]},
   "protobuffs": {:git, "git://github.com/basho/erlang_protobuffs.git", "37f9b1c50abd867302b9ff5c3ca59ea157cdf3e5", [{:tag, "0.8.1p3"}]},
-  "riak_pb": {:git, "git://github.com/basho/riak_pb", "c5ea3be4c2cdc3c9de35a36245ea69135cf00396", [{:tag, "2.0.0.12"}]},
-  "riakc": {:git, "git://github.com/basho/riak-erlang-client.git", "e01cb4b44b81cfc298698a842f7ce3dee59a8b58", []},
+  "riak_pb": {:git, "git://github.com/basho/riak_pb", "3e63494ab780de480e20dd680f044458c0ac5b6b", [{:tag, "2.0.0.11"}]},
+  "riakc": {:git, "git://github.com/basho/riak-erlang-client.git", "90b6d000ea1f209d4e6673a72d92ca48a2ae2529", [{:ref, "90b6d000ea1f209d4e6673a72d92ca48a2ae2529"}]},
   "statebox": {:git, "git://github.com/mochi/statebox.git", "99633db6d021bd282c2bfbe0b70ac340fcdd96c4", []} ]

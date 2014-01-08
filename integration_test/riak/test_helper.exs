@@ -143,6 +143,10 @@ defmodule Ecto.Integration.Riak.Util do
       res
     end
   end
+
+  def remove_virtual_fields(entity) do
+    entity.update(riak_context: nil, riak_vclock: nil)
+  end
 end
 
 ## ----------------------------------------------------------------------

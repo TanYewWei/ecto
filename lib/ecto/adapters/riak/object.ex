@@ -59,7 +59,12 @@ defmodule Ecto.Adapters.Riak.Object do
     bucket = RiakUtil.bucket(entity)
     key = entity.primary_key
     value = JSON.encode({ kws })
-    RiakObject.new(bucket, key, value, @content_type)
+    new_object = RiakObject.new(bucket, key, value, @content_type)
+    if is_record(entity.riak_vclock, Ecto.Binary) do
+      RiakObject.set_vclock(new_object, entity.riak_vclock.value)
+    else
+      new_object
+    end
   end
 
   @spec object_to_entity(object) :: entity
@@ -68,12 +73,12 @@ defmodule Ecto.Adapters.Riak.Object do
     case RiakObject.get_values(object) do
       [] ->
         ## attempt lookup of updatedvalue field
-        elem(object, tuple_size(object)-1)
-        |> resolve_value
+        value = elem(object, tuple_size(object)-1)
+        resolve_value(value, object)
       [ value ] ->
-        resolve_value(value)
+        resolve_value(value, object)
       values ->
-        resolve_siblings(values)
+        resolve_siblings(values, object)
     end
   end
 
@@ -106,17 +111,27 @@ defmodule Ecto.Adapters.Riak.Object do
     end
   end 
 
-  @spec resolve_value(binary) :: entity
-  def resolve_value(value) do
-    resolve_to_statebox(value) |> statebox_to_entity
+  @spec resolve_value(binary, object) :: entity
+  defp resolve_value(value, object) do
+    entity = resolve_to_statebox(value) |> statebox_to_entity
+    if is_binary(object.vclock) do
+      entity.riak_vclock(object.vclock)
+    else
+      entity
+    end
   end
 
-  @spec resolve_siblings([binary | json]) :: entity
-  def resolve_siblings(values) do
+  @spec resolve_siblings([binary | json], object) :: entity
+  def resolve_siblings(values, object) do
     stateboxes = Enum.map(values, &resolve_to_statebox/1)
     statebox = :statebox_orddict.from_values(stateboxes)
     statebox = :statebox.truncate(0, statebox)
-    statebox_to_entity(statebox)
+    entity = statebox_to_entity(statebox)
+    if is_binary(object.vclock) do
+      entity.riak_vclock(object.vclock)
+    else
+      entity
+    end
   end
 
   @spec resolve_to_statebox(binary | json) :: statebox
