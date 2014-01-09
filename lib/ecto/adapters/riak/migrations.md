@@ -32,16 +32,16 @@ Hence, migrations have to be dynamic, and performed as entites are read from the
 3. Each entity must also implement the `Ecto.Adapters.Riak.Migration` behaviour, which has 3 required callbacks:
 
     ```elixir
-## returns the appropriate version number of the entity
-version() :: integer
+    ## returns the appropriate version number of the entity
+    version() :: integer
 
-## Takes an entity with version number N-1 and migrates
-## it to the version N returned by the version/0 function above
-migrate_from_previous(entity) :: entity
+    ## Takes an entity with version number N-1 and migrates
+    ## it to the version N returned by the version/0 function above
+    migrate_from_previous(entity) :: entity
 
-## Takes an entity with version number N+1 and migrates
-## it to the version N returned by the version/0 function above
-migrate_from_newer(entity) :: entity
+    ## Takes an entity with version number N+1 and migrates
+    ## it to the version N returned by the version/0 function above
+    migrate_from_newer(entity) :: entity
     ```
 
     It will then be the developer's responsibility to implement these functions accordingly
@@ -59,7 +59,9 @@ defmodule Model.Post do
   use Ecto.RiakModel
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
 
-  queryable "model.posts" do  ## queryable source determines the bucket to put to in riak
+  ## queryable source determines the bucket to put to in riak.
+  ## this should be a unique namespace for each model.
+  queryable "model.posts" do
     field :title, :string
     field :hello, :string
     has_many :comments, Model.Comment
