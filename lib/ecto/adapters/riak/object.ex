@@ -285,7 +285,7 @@ defmodule Ecto.Adapters.Riak.Object do
     Regex.replace(@yz_key_regex, to_string(key), "")
   end
 
-  @spec yz_key(binary, atom | { :list, atom }) :: binary
+  @spec yz_key(binary, atom | { :array, atom }) :: binary
   def yz_key(key, type) do
     ## Adds a YZ schema suffix to a key depending on its type.
     to_string(key) <> "_" <>
@@ -297,7 +297,7 @@ defmodule Ecto.Adapters.Riak.Object do
         :boolean  -> "b"
         :datetime -> "dt"
         :interval -> "i_dt"
-        { :list, list_type } ->
+        { :array, list_type } ->
           case list_type do
             :integer  -> "is"
             :float    -> "fs"

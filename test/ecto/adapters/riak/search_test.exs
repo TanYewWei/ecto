@@ -5,7 +5,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   
   ##require Ecto.Adapters.Riak.Search, as: Search
   import Ecto.Query
-  import Ecto.Query.Util, only: [normalize: 1]
+  import Ecto.Query.Normalizer, only: [normalize: 1]
   alias Ecto.Adapters.Riak.Search
   alias Ecto.Adapters.Riak.Datetime
   alias Ecto.Test.Riak.Post

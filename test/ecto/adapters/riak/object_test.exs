@@ -66,6 +66,7 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
     assert entity.text == e0.text
     assert entity.count == e1.count
     assert entity.rating == e2.rating
+    assert entity.tags == e0.tags
     assert entity.posted == e0.posted
     assert entity.temp == "temp"  ## not carried over
   end
@@ -80,6 +81,7 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
              text: "test text",
              count: 4,
              rating: 5,
+             tags: ["some", "tags", "here"],
              posted: Datetime.now_ecto_datetime,
              temp: "test temp")
   end  

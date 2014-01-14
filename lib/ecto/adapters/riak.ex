@@ -10,6 +10,7 @@ defmodule Ecto.Adapters.Riak do
   alias Ecto.Adapters.Riak.Object, as: RiakObj
   alias Ecto.Adapters.Riak.Search
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
+  alias Ecto.Query.Normalizer
   alias Ecto.Query.Query
   alias Ecto.Query.Util
 
@@ -125,7 +126,7 @@ defmodule Ecto.Adapters.Riak do
   """
   @spec all(Ecto.Repo.t, Ecto.Query.t) :: [term] | no_return
   def all(repo, query) do
-    query = Util.normalize(query)
+    query = Normalizer.normalize(query)
     { query_tuple, post_proc_fun } = Search.query(query)
     { _, _, querystring, _ } = query_tuple
     
@@ -188,7 +189,7 @@ defmodule Ecto.Adapters.Riak do
   the number of affected entities.
   """
   def update_all(repo, Query[] = query, values) do
-    query = Util.normalize(query)
+    query = Normalizer.normalize(query)
     { query_tuple, post_proc_fun } = Search.query(query)
 
     fun = fn socket ->
@@ -232,7 +233,7 @@ defmodule Ecto.Adapters.Riak do
   entities.
   """
   def delete_all(repo, Query[] = query) do
-    query = Util.normalize(query)
+    query = Normalizer.normalize(query)
     { query_tuple, post_proc_fun } = Search.query(query)
 
     fun = fn socket ->
