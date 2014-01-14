@@ -3,7 +3,8 @@ defmodule Ecto.Query.ValidatorTest do
 
   import Ecto.Query
   alias Ecto.Query.Query
-  alias Ecto.Query.Util
+  alias Ecto.Query.Normalizer
+  alias Ecto.Query.Validator
 
   defmodule Post do
     use Ecto.Model
@@ -34,7 +35,11 @@ defmodule Ecto.Query.ValidatorTest do
     end
   end
 
-  def validate(query), do: query |> Util.normalize |> Util.validate([Ecto.Query.API])
+  def validate(query) do
+    query
+    |> Normalizer.normalize
+    |> Validator.validate([Ecto.Query.API])
+  end
 
 
   test "valid query with bindings" do
@@ -150,16 +155,10 @@ defmodule Ecto.Query.ValidatorTest do
   end
 
   test "valid in expression" do
-    query = from(Post) |> select([], 1 in [1,2,3])
-    validate(query)
-
-    query = from(Post) |> select([], '1' in ['1','2','3'])
+    query = from(Post) |> select([], 1 in array([1,2,3], ^:integer))
     validate(query)
 
     query = from(Post) |> select([], (2+2) in 1..5)
-    validate(query)
-
-    query = from(Post) |> select([], [1] in [[1], [1, 2, 3], []])
     validate(query)
   end
 
@@ -176,22 +175,27 @@ defmodule Ecto.Query.ValidatorTest do
   end
 
   test "invalid .. expression" do
-    query = from(Post) |> select([], 1 .. '3')
-    assert_raise Ecto.Query.TypeCheckError, fn ->
-      validate(query)
-    end
-
     query = from(Post) |> select([], "1" .. 3)
     assert_raise Ecto.Query.TypeCheckError, fn ->
       validate(query)
     end
   end
 
-  test "list expression" do
-    query = from(Post) |> where([p], [p.title, p.title] == nil) |> select([], 0)
+  test "array expression" do
+    query = from(Post) |> where([p], array([p.title, p.title], ^:string) == nil) |> select([], 0)
     validate(query)
 
-    query = from(Post) |> where([p], [p.title, p.title] == 1) |> select([], 0)
+    query = from(Post) |> where([p], [p.title, p.title] == nil) |> select([], 0)
+    assert_raise Ecto.QueryError, fn ->
+      validate(query)
+    end
+
+    query = from(Post) |> select([p], 1 in [123, 123])
+    assert_raise Ecto.QueryError, fn ->
+      validate(query)
+    end
+
+    query = from(Post) |> where([p], array([p.title, p.title], ^:string) == 1) |> select([], 0)
     assert_raise Ecto.Query.TypeCheckError, fn ->
       validate(query)
     end
@@ -311,9 +315,9 @@ defmodule Ecto.Query.ValidatorTest do
   end
 
   test "multiple query apis" do
-    query = from(Post) |> select([p], custom(p.id)) |> Util.normalize
-    Util.validate(query, [CustomAPI])
-    Util.validate(query, [Ecto.Query.API, CustomAPI])
+    query = from(Post) |> select([p], custom(p.id)) |> Normalizer.normalize
+    Validator.validate(query, [CustomAPI])
+    Validator.validate(query, [Ecto.Query.API, CustomAPI])
   end
 
   test "cannot reference virtual field" do
@@ -418,13 +422,11 @@ defmodule Ecto.Query.ValidatorTest do
     query = from(Post, select: binary("abc") <> binary(<<0,1,2>>))
     validate(query)
 
+    query = from(p in Post, select: binary(p.title))
+    validate(query)
+
     query = from(Post, select: binary("abc") <> "abc")
     assert_raise Ecto.Query.TypeCheckError, fn ->
-      validate(query)
-    end
-
-    query = from(p in Post, select: binary(p.text))
-    assert_raise Ecto.QueryError, "binary/1 argument has to be a literal of binary type", fn ->
       validate(query)
     end
   end

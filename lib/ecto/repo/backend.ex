@@ -6,7 +6,17 @@ defmodule Ecto.Repo.Backend do
   alias Ecto.Query.Util
   alias Ecto.Query.FromBuilder
   alias Ecto.Query.BuilderUtil
+  alias Ecto.Query.Normalizer
+  alias Ecto.Query.Validator
   require Ecto.Query, as: Q
+
+  def storage_up(repo, adapter) do
+    adapter.storage_up(parse_url(repo.url))
+  end
+
+  def storage_down(repo, adapter) do 
+    adapter.storage_down(parse_url(repo.url))
+  end
 
   def start_link(repo, adapter) do
     Enum.each(repo.query_apis, &Code.ensure_loaded(&1))
@@ -22,7 +32,7 @@ defmodule Ecto.Repo.Backend do
     entity      = query.from |> Util.entity
     primary_key = entity.__entity__(:primary_key)
 
-    Util.validate_get(query, repo.query_apis)
+    Validator.validate_get(query, repo.query_apis)
     check_primary_key(entity)
 
     case Util.value_to_type(id) do
@@ -35,7 +45,7 @@ defmodule Ecto.Repo.Backend do
     # normalization and what not.
     query = Q.from(x in query,
                    where: field(x, ^primary_key) == ^id,
-                   limit: 1) |> Util.normalize
+                   limit: 1) |> Normalizer.normalize
 
     case adapter.all(repo, query) do
       [entity] -> entity
@@ -45,17 +55,19 @@ defmodule Ecto.Repo.Backend do
   end
 
   def all(repo, adapter, queryable) do
-    query = Queryable.to_query(queryable) |> Util.normalize
-    Util.validate(query, repo.query_apis)
+    query = Queryable.to_query(queryable) |> Normalizer.normalize
+    Validator.validate(query, repo.query_apis)
     adapter.all(repo, query)
   end
 
   def create(repo, adapter, entity) do
+    entity = normalize_entity(entity)
     validate_entity(entity)
     adapter.create(repo, entity)
   end
 
   def update(repo, adapter, entity) do
+    entity = normalize_entity(entity)
     check_primary_key(entity)
     validate_entity(entity)
 
@@ -77,12 +89,13 @@ defmodule Ecto.Repo.Backend do
   end
 
   def runtime_update_all(repo, adapter, queryable, values) do
-    query = Queryable.to_query(queryable) |> Util.normalize(skip_select: true)
-    Util.validate_update(query, repo.query_apis, values)
+    query = Queryable.to_query(queryable) |> Normalizer.normalize(skip_select: true)
+    Validator.validate_update(query, repo.query_apis, values)
     adapter.update_all(repo, query, values)
   end
 
   def delete(repo, adapter, entity) do
+    entity = normalize_entity(entity)
     check_primary_key(entity)
     validate_entity(entity)
 
@@ -90,8 +103,8 @@ defmodule Ecto.Repo.Backend do
   end
 
   def delete_all(repo, adapter, queryable) do
-    query = Queryable.to_query(queryable) |> Util.normalize(skip_select: true)
-    Util.validate_delete(query, repo.query_apis)
+    query = Queryable.to_query(queryable) |> Normalizer.normalize(skip_select: true)
+    Validator.validate_delete(query, repo.query_apis)
     adapter.delete_all(repo, query)
   end
 
@@ -105,7 +118,7 @@ defmodule Ecto.Repo.Backend do
     Enum.map(urls, &parse_url/1)
   end
 
-  defp parse_url(url) do  
+  defp parse_url(url) do
     unless url =~ %r/^[^:\/?#\s]+:\/\// do
       raise Ecto.InvalidURL, url: url, reason: "url should start with a scheme, host should start with //"
     end
@@ -182,6 +195,22 @@ defmodule Ecto.Repo.Backend do
       unless valid do
         raise Ecto.InvalidEntity, entity: entity, field: field,
           type: value_type, expected_type: type
+      end
+    end)
+  end
+
+  defp normalize_entity(entity) do
+    module = elem(entity, 0)
+    fields = module.__entity__(:field_names)
+
+    Enum.reduce(fields, entity, fn field, entity ->
+      type = module.__entity__(:field_type, field)
+
+      if Util.type_castable_to?(type) do
+        value = apply(entity, field, []) |> Util.try_cast(type)
+        apply(entity, field, [value])
+      else
+        entity
       end
     end)
   end
