@@ -21,7 +21,7 @@ defmodule Ecto.Adapters.Riak.ValidatorsTest do
 
     queryable "models" do
       field :integer, :integer
-      field :list, { :list, :float }
+      field :list, { :array, :float }
       field :riak_version, :integer, default: 0
     end
     

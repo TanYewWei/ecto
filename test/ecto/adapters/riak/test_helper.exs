@@ -8,6 +8,7 @@ defmodule Ecto.Test.Riak.Post do
     field :temp, :virtual, default: "temp"
     field :count, :integer
     field :rating, :float
+    field :tags, { :array, :string }
     field :riak_version, :integer, default: 0
     has_many :comments, Ecto.Test.Riak.Comment
     has_one :permalink, Ecto.Test.Riak.Permalink
