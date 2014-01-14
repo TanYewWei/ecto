@@ -17,7 +17,7 @@ defmodule Ecto.Query.API do
   deft boolean
   deft binary
   deft string
-  deft list(var)
+  deft array(var)
   deft datetime
   deft interval
   deft nil
@@ -105,15 +105,15 @@ defmodule Ecto.Query.API do
   defs boolean or boolean :: boolean
 
   @doc """
-  Return `true` if `left` is in `right` list, `false`
+  Return `true` if `left` is in `right` array, `false`
   otherwise.
   """
   def left in right
-  defs var in list(var) :: boolean
+  defs var in array(var) :: boolean
 
   @doc "Range from left to right."
   def left .. right
-  defs integer .. integer :: list(integer)
+  defs integer .. integer :: array(integer)
 
   @doc "Binary and string concatenation."
   def left <> right
@@ -122,17 +122,27 @@ defmodule Ecto.Query.API do
 
   @doc "List concatenation."
   def left ++ right
-  defs list(var) ++ list(var) :: list(var)
+  defs array(var) ++ array(var) :: array(var)
 
   ## Functions
+
+  @doc """
+  References a field. This can be used when a field needs
+  to be dynamically referenced.
+
+  ## Examples
+
+      x = :title
+      from(p in Post, select: field(p, ^x))
+
+  """
+  def field(_var, _atom), do: raise "field/2 should have been expanded"
 
   @doc """
   Casts a binary literal to a binary type. By default a
   binary literal is of the string type.
   """
-  def binary(binary)
-  defs binary(binary) :: binary
-  defs binary(string) :: binary
+  def binary(_string), do: raise "binary/1 should have been expanded"
 
   @doc "Addition of datetime's with interval's"
   def date_add(left, right)
