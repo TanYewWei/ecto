@@ -60,10 +60,13 @@ defmodule Ecto.Adapters.Riak.Object do
     key = entity.primary_key
     value = JSON.encode({ kws })
     new_object = RiakObject.new(bucket, key, value, @content_type)
-    if is_record(entity.riak_vclock, Ecto.Binary) do
-      RiakObject.set_vclock(new_object, entity.riak_vclock.value)
-    else
-      new_object
+    cond do
+      is_record(entity.riak_vclock, Ecto.Binary) ->
+        RiakObject.set_vclock(new_object, entity.riak_vclock.value)
+      is_binary(entity.riak_vlock) ->
+        RiakObject.set_vclock(new_object, entity.riak_vclock)
+      true ->
+        new_object
     end
   end
 
