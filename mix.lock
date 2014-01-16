@@ -4,7 +4,7 @@
   "meck": {:git, "git://github.com/basho/meck.git", "2b25a30a8688f94106d07f23a9f1fb523ac00f08", [tag: "0.8.1"]},
   "poolboy": {:git, "git://github.com/devinus/poolboy.git", "d47df5df57b22eb183b0c48c8dcc5f9827fad71b", []},
   "pooler": {:git, "git://github.com/seth/pooler.git", "a2452716489e75376344a54b0a29daff4be2f90b", []},
-  "postgrex": {:git, "git://github.com/ericmj/postgrex.git", "d5edcd2466ea9260c57f1cb1e67990731c3c9608", []},
+  "postgrex": {:git, "git://github.com/ericmj/postgrex.git", "a84ab254c04dff0de6c34a00bb79039efd220762", []},
   "proper": {:git, "git://github.com/manopapad/proper", "c37cab86f5e9dd5c5e751248cf1566a5d4f9535c", [ref: "master"]},
   "protobuffs": {:git, "git://github.com/basho/erlang_protobuffs.git", "37f9b1c50abd867302b9ff5c3ca59ea157cdf3e5", [tag: "0.8.1p3"]},
   "riak_pb": {:git, "git://github.com/basho/riak_pb", "3e63494ab780de480e20dd680f044458c0ac5b6b", [tag: "2.0.0.11"]},
