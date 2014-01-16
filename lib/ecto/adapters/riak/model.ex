@@ -23,7 +23,8 @@ defmodule Ecto.RiakModel do
                           { :riak_vclock, :virtual, [] },
                           { :riak_context, :virtual, default: [] } ] ]
       
-      use Ecto.Model
+      use Ecto.RiakModel.Queryable
+      use Ecto.Model.Validations
       import Ecto.Adapters.Riak.Validators
       
       def version(:default), do: 0
