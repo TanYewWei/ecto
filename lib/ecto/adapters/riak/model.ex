@@ -3,14 +3,13 @@ defmodule Ecto.RiakModel do
   When using the Riak Adapter, we require:
 
   * globally unique ids - these will be unique strings
-  * A `__riak_version__` field - an integer version used for dynamic migrations
-  * A `__riak_context__` field - a Keyword list of field to a hash of its values.
-    used in conflict resolution to determine if an entity has been updated since
-    the last get, and to attach the appropriate information for future conflict
-    resolution work (done on read of entity)
-  * default migration functions
+  * A `riak_version` field - an integer version used for dynamic migrations
+  * A `riak_vclock` field - a binary used for conflict resolution
+    of riak siblings
+  * A `riak_context` field - to 
+  * migration callbacks defined by the `Ecto.Adapters.Riak.Migration` module
 
-  Using Ecto.RiakModel instead of Ecto.Model ensures
+  Using `Ecto.RiakModel` instead of `Ecto.Model` ensures
   that these constraints is enforced.
   """
 
@@ -19,9 +18,9 @@ defmodule Ecto.RiakModel do
       @queryable_defaults [
         primary_key: { :id, :string, [] },
         foreign_key_type: :string,
-        default_fields: [ { :riak_version, :integer, default: 0, overridable?: true },
+        default_fields: [ { :riak_version, :integer, [default: 0] },
                           { :riak_vclock, :virtual, [] },
-                          { :riak_context, :virtual, default: [] } ] ]
+                          { :riak_context, :virtual, [default: []] } ] ]
       
       use Ecto.RiakModel.Queryable
       use Ecto.Model.Validations

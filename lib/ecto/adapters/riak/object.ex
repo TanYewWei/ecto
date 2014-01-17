@@ -63,7 +63,7 @@ defmodule Ecto.Adapters.Riak.Object do
     cond do
       is_record(entity.riak_vclock, Ecto.Binary) ->
         RiakObject.set_vclock(new_object, entity.riak_vclock.value)
-      is_binary(entity.riak_vlock) ->
+      is_binary(entity.riak_vclock) ->
         RiakObject.set_vclock(new_object, entity.riak_vclock)
       true ->
         new_object

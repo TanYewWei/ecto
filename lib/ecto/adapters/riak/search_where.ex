@@ -87,7 +87,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
 
   defp where_expr({ fun, _, args }, sources) 
   when is_atom(fun) and is_list(args) and fun in @unary_ops do
-    arg = where_expr(Enum.first(args), sources)
+    arg = where_expr(List.first(args), sources)
     case fun do
       :now ->
         "NOW"

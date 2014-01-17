@@ -89,7 +89,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
 
   defp select_transform({ op, _, args }, entity)
   when is_atom(op) and length(args) == 1 and op in @unary_ops do
-    arg = select_transform(Enum.first(args), entity)
+    arg = select_transform(List.first(args), entity)
     case op do
       :- ->
         -1 * arg
