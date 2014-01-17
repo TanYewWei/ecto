@@ -215,7 +215,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
     :base64.encode(binary)
   end
 
-  defp literal(Ecto.Array[value: list, type: type]) do
+  defp literal(Ecto.Array[value: list, type: _]) do
     list
   end
 

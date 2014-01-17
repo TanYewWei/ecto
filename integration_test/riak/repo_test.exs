@@ -76,7 +76,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     post_ids = Enum.map([p0, p1, p2], &(&1.id))
 
     wait_assert [Post.Entity[title: "1"], Post.Entity[title: "2"], Post.Entity[title: "3"]] =
-      TestRepo.all(from p in Post, where: p.id in ^post_ids, order_by: p.title)
+      TestRepo.all(from p in Post, where: p.id in array(^post_ids, ^:string), order_by: p.title)
 
     wait_assert [Post.Entity[title: "2"]] =
       TestRepo.all(from p in Post, where: p.id == ^p1.id and p.title == "2")
@@ -211,7 +211,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     c4 = remove_virtual_fields(c4)
 
     query = from(p in Post,
-                 where: p.id in [^p1.id, ^p2.id, ^p3.id],
+                 where: p.id in array([^p1.id, ^p2.id, ^p3.id], ^:string),
                  order_by: p.title,
                  preload: :comments)
     [p1, p2, p3] =
@@ -245,7 +245,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     assert p1.permalink.loaded? == false
 
     query = from(p in Post,
-                 where: p.id in [^p1.id, ^p2.id, ^p3.id],
+                 where: p.id in array([^p1.id, ^p2.id, ^p3.id], ^:string),
                  order_by: p.title,
                  preload: :permalink)
     [p1, p2, p3] =
@@ -272,7 +272,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     assert pl1.post.loaded? == false
     
     query = from(l in Permalink,
-                 where: l.id in [^pl1.id, ^pl2.id, ^pl3.id],
+                 where: l.id in array([^pl1.id, ^pl2.id, ^pl3.id], ^:string),
                  order_by: l.url,
                  preload: :post)
     [pl2, pl3, pl1] = 
@@ -293,7 +293,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     c3 = TestRepo.create(Comment.Entity[text: "3", post_id: pid2])
 
     query = from(c in Comment,
-                 where: c.id in [^c1.id, ^c2.id, ^c3.id],
+                 where: c.id in array([^c1.id, ^c2.id, ^c3.id], ^:string),
                  order_by: [desc: c.text],
                  preload: [:post])
     [c3, c2, c1] =
@@ -314,7 +314,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
 
     ##wait_for_index
     query = from(c in Comment,
-                 where: c.id in [^c1.id, ^c2.id, ^c3.id],
+                 where: c.id in array([^c1.id, ^c2.id, ^c3.id], ^:string),
                  preload: [:post],
                  order_by: c.text)
     [c1, c3, c2] =
@@ -335,7 +335,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     c4 = TestRepo.create(Comment.Entity[text: "4", post_id: p2.id])
     
     query = from(p in Post,
-                 where: p.id in [^p1.id, ^p2.id],
+                 where: p.id in array([^p1.id, ^p2.id], ^:string),
                  order_by: [asc: p.title],
                  preload: [comments: [:post]])
     [p1, p2] =
@@ -370,7 +370,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     c4 = remove_virtual_fields(c4)
 
     query = from(p in Post,
-                 where: p.id in [^p1.id, ^p2.id, ^p3.id],
+                 where: p.id in array([^p1.id, ^p2.id, ^p3.id], ^:string),
                  preload: [:comments],
                  order_by: p.title,
                  select: p)
@@ -387,7 +387,7 @@ defmodule Ecto.Integration.Riak.RepoTest do
     assert [] = p3.comments.to_list
 
     query = from(p in Post,
-                 where: p.id in [^p1.id, ^p2.id, ^p3.id],
+                 where: p.id in array([^p1.id, ^p2.id, ^p3.id], ^:string),
                  preload: [:comments],
                  order_by: p.title,
                  select: { 0, [p] })
