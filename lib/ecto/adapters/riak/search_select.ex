@@ -14,7 +14,8 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
                    :==, :!=, :<=, :<, :>=, :>,
                    :and, :or,
                    :<>, :++,
-                   :date_add, :date_sub]
+                   :date_add, :date_sub,
+                   :round]
   @aggregate_ops  [:avg, :count, :max, :min, :sum]
 
   @doc """
@@ -95,8 +96,8 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
         -1 * arg
       :+ ->
         arg
-      :round ->
-        Kernel.round(arg)
+      :round -> ## always returns float
+        Kernel.round(arg) * 1.0
       :downcase ->
         String.downcase(arg)
       :upcase ->
@@ -106,7 +107,7 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
     end
   end
 
-  defp select_transform({ op, _, [left, right] }, entity)
+  defp select_transform({ op, _, [left, right] = args }, entity)
   when is_atom(op) and op in @binary_ops do
     left = select_transform(left, entity)
     right = select_transform(right, entity)
@@ -143,8 +144,10 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
         left <> right
       :++ ->
         left ++ right
+      :round when is_number(left) and is_integer(right) ->
+        Float.round(left * 1.0, right)
       _ ->
-        raise Ecto.QueryError, reason: "unsupported select binary op: #{op}"
+        raise Ecto.QueryError, reason: "unsupported select binary op: #{op} with args #{inspect args}"
     end
   end
 

@@ -7,16 +7,14 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   ## Constants
 
   @unary_ops   [:-, :+, :now]
-  @binary_ops  [:==, :!=, :<=, :>=, :<, :>, :and, :or, :like, :date_add, :date_sub]
+  @binary_ops  [:==, :!=, :<=, :>=, :<, :>, :and, :or, :like, :date_add, :date_sub, :array]
 
   ## API
 
   def query(wheres, sources) do
-    Enum.map_join(wheres,
-                  " ",
-                  fn QueryExpr[expr: expr] ->
-                      where_expr(expr, sources)
-                  end)
+    Enum.map_join(wheres, " ", fn QueryExpr[expr: expr] ->
+      where_expr(expr, sources)
+    end)
   end
 
   defp where_expr({ :., _, [{ :&, _, [_] }=var, field] }, sources) when is_atom(field) do
@@ -46,12 +44,16 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
     where_expr(left, sources) <> ":*"
   end
 
-  ## element in range
+  ## element in range or array
   defp where_expr({ :in, _, [left, Range[first: first, last: last]] }, sources) do
     field = where_expr(left, sources)
     range_start = where_expr(first, sources)
     range_end = where_expr(last, sources)
     "#{field}:[#{range_start} TO #{range_end}]"
+  end
+  
+  defp where_expr({ :in, _, [left, Ecto.Array[value: array]] }, sources) do
+    where_expr(left, sources) <> ":(" <> where_expr(array, sources) <> ")"
   end
 
   ## element in collection
@@ -68,6 +70,8 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   defp where_expr({ :.., _, [first, last] }, sources) do
     where_expr(Enum.to_list(first..last), sources)
   end 
+
+  ## Unsupported expressions
 
   defp where_expr({ :/, _, _ }, _) do
     raise Ecto.QueryError, reason: "where queries to Riak do not permit the `/` operator"
@@ -209,6 +213,10 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
 
   defp literal(Ecto.Binary[value: binary]) do
     :base64.encode(binary)
+  end
+
+  defp literal(Ecto.Array[value: list, type: type]) do
+    list
   end
 
   defp literal(literal) when is_binary(literal) do

@@ -44,6 +44,14 @@ defmodule Ecto.Adapters.Riak.SearchTest do
     where(base, [p], p.count in 1..5 and nil != p.title)
     |> test_query "count_i:(1 2 3 4 5) AND (title_s:*)"
 
+    ## arrays
+    insert_var = 5
+    where(base, [p], p.count in array([1,^insert_var,3], ^:integer))
+    |> test_query "count_i:(1 #{insert_var} 3)"
+
+    where(base, [p], p.title in array(%w(abc def), ^:string))
+    |> test_query "title_s:(abc def)"
+
     ## like
     where(base, [p], like(p.text, "hello"))
     |> test_query "text_s:*hello*"
@@ -111,6 +119,10 @@ defmodule Ecto.Adapters.Riak.SearchTest do
     query = select(base, [p], p.title <> p.text) |> normalize
     { _, post_proc } = Search.query(query)
     assert [post.title <> post.text] == post_proc.([post])
+
+    query = select(base, [p], round(p.rating, 1)) |> normalize
+    { _, post_proc } = Search.query(query)
+    assert [Float.round(post.rating, 1)] == post_proc.([post])
     
   end
 
@@ -299,7 +311,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
              title: "test title",
              text: "test text",
              count: 4,
-             rating: 5,
+             rating: 4.9999,
              posted: Datetime.now_ecto_datetime,
              temp: "test temp")
   end
