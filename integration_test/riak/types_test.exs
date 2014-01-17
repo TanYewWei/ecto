@@ -16,10 +16,9 @@ defmodule Ecto.Integration.Riak.TypesTest do
     wait_assert Comment.Entity[interval: Ecto.Interval[]] = TestRepo.get(Comment, c.id)
   end
 
-  test "binary type" do
-    binary = Ecto.Binary[value: << 0, 1, 2, 3, 4 >>]
+  test "binary type is hidden" do
+    binary = << 0, 1, 2, 3, 4 >>
     c = TestRepo.create(Comment.Entity[bytes: binary])
-
     wait_assert Comment.Entity[bytes: ^binary] = TestRepo.get(Comment, c.id)
   end
 end

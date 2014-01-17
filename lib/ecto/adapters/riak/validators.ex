@@ -17,8 +17,17 @@ defmodule Ecto.Adapters.Riak.Validators do
       validate unquote(x),
         [ { :primary_key, unquote(__MODULE__).validate_is_binary },
           { :riak_version, unquote(__MODULE__).validate_is_integer },
+          { :riak_vclock, unquote(__MODULE__).maybe_validate_is_binary },
           { :riak_context, unquote(__MODULE__).validate_is_list },
           unquote_splicing(fields) ]
+    end
+  end
+
+  def maybe_validate_is_binary(attr, value, opts // []) do
+    if nil?(value) do
+      []
+    else
+      validate_is_binary(attr, value, opts)
     end
   end
 

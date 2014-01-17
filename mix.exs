@@ -22,7 +22,7 @@ defmodule Ecto.Mixfile do
 
   defp deps(:prod) do
     [ { :poolboy, github: "devinus/poolboy" },
-      { :postgrex, "~> 0.3.0", github: "ericmj/postgrex", optional: true },
+      { :postgrex, "~> 0.4.0", github: "ericmj/postgrex", optional: true },
      
       ## Riak dependencies
       { :ecto_riak, github: "TanYewWei/ecto_riak", optional: true } ]

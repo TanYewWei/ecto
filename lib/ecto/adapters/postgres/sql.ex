@@ -9,6 +9,7 @@ defmodule Ecto.Adapters.Postgres.SQL do
   alias Ecto.Query.QueryExpr
   alias Ecto.Query.JoinExpr
   alias Ecto.Query.Util
+  import Decimal, only: [is_decimal: 1]
 
   unary_ops = [ -: "-", +: "+" ]
 
@@ -285,7 +286,7 @@ defmodule Ecto.Adapters.Postgres.SQL do
   end
 
   defp expr({ :/, _, [left, right] }, sources) do
-    op_to_binary(left, sources) <> " / " <> op_to_binary(right, sources) <> "::float"
+    op_to_binary(left, sources) <> " / " <> op_to_binary(right, sources) <> "::numeric"
   end
 
   defp expr({ arg, _, [] }, sources) when is_tuple(arg) do
@@ -295,7 +296,7 @@ defmodule Ecto.Adapters.Postgres.SQL do
   defp expr({ fun, _, args }, sources) when is_atom(fun) and is_list(args) do
     case translate_name(fun, length(args)) do
       { :unary_op, op } ->
-        arg = expr(Enum.first(args), sources)
+        arg = expr(List.first(args), sources)
         op <> arg
       { :binary_op, op } ->
         [left, right] = args
@@ -342,8 +343,18 @@ defmodule Ecto.Adapters.Postgres.SQL do
     "'#{escape_string(literal)}'"
   end
 
-  defp literal(literal) when is_number(literal) do
+  defp literal(literal) when is_integer(literal) do
     to_string(literal)
+  end
+
+  defp literal(literal) when is_float(literal) do
+    to_string(literal) <> "::float"
+  end
+
+  defp literal(num) when is_decimal(num) do
+    str = Decimal.to_string(num, :normal)
+    if :binary.match(str, ".") == :nomatch, do: str = str <> ".0"
+    str
   end
 
   defp op_to_binary({ op, _, [_, _] } = expr, sources) when op in @binary_ops do

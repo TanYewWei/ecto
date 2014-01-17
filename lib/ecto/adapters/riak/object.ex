@@ -39,6 +39,8 @@ defmodule Ecto.Adapters.Riak.Object do
           Datetime.interval_to_string(val)
         is_record(val, Ecto.Binary) ->
           :base64.encode(val.value)
+        is_record(val, Ecto.Array) ->
+          val.value
         true ->
           JSON.maybe_null(val)
       end
@@ -60,10 +62,11 @@ defmodule Ecto.Adapters.Riak.Object do
     key = entity.primary_key
     value = JSON.encode({ kws })
     new_object = RiakObject.new(bucket, key, value, @content_type)
-    if is_record(entity.riak_vclock, Ecto.Binary) do
-      RiakObject.set_vclock(new_object, entity.riak_vclock.value)
-    else
-      new_object
+    cond do
+      is_binary(entity.riak_vclock) ->
+        RiakObject.set_vclock(new_object, entity.riak_vclock)
+      true ->
+        new_object
     end
   end
 
@@ -200,12 +203,14 @@ defmodule Ecto.Adapters.Riak.Object do
   end
 
   defp ecto_value(nil, _), do: nil
+
+  defp ecto_value(Ecto.Array[value: value], _), do: value
   
   defp ecto_value(val, type) do
     case type do
-      :binary ->
+      :binary ->        
         if is_binary(val) do
-          Ecto.Binary[value: :base64.decode(val)]
+          :base64.decode(val)
         else
           nil
         end
