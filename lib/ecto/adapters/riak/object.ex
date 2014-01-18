@@ -316,7 +316,7 @@ defmodule Ecto.Adapters.Riak.Object do
   end
 
   defp value_hash(term) do
-    bin = term_to_binary(term, minor_version: 1)
+    bin = :erlang.term_to_binary(term, minor_version: 1)
     :crypto.hash(:sha256, bin)
   end
 
