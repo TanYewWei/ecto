@@ -51,7 +51,7 @@ defmodule Ecto.Adapters.Postgres.SQL do
     sources  = create_names(query)
 
     from     = from(sources)
-    select   = select(query.select, sources)
+    select   = select(query.select, query.distincts, sources)
     join     = join(query, sources)
     where    = where(query.wheres, sources)
     group_by = group_by(query.group_bys, sources)
@@ -146,8 +146,19 @@ defmodule Ecto.Adapters.Postgres.SQL do
     "DELETE FROM #{quote_table(table)} AS #{name}" <> where
   end
 
-  defp select(QueryExpr[expr: expr], sources) do
+  defp select(QueryExpr[expr: expr], [], sources) do
     "SELECT " <> select_clause(expr, sources)
+  end
+
+  defp select(QueryExpr[expr: expr], distincts, sources) do
+    exprs = Enum.map_join(distincts, ", ", fn expr ->
+      Enum.map_join(expr.expr, ", ", fn { var, field } ->
+        { _, name } = Util.find_source(sources, var) |> Util.source
+        "#{name}.#{quote_column(field)}"
+      end)
+    end)
+
+    "SELECT DISTINCT ON (" <> exprs <> ") " <> select_clause(expr, sources)
   end
 
   defp from(sources) do
@@ -261,7 +272,7 @@ defmodule Ecto.Adapters.Postgres.SQL do
     "#{op_to_binary(left, sources)} IS NOT NULL"
   end
 
-  defp expr({ :in, _, [left, Range[first: first, last: last]] }, sources) do
+  defp expr({ :in, _, [left, first .. last] }, sources) do
     sqls = [ expr(left, sources), "BETWEEN", expr(first, sources), "AND",
              expr(last, sources) ]
     Enum.join(sqls, " ")
@@ -277,7 +288,7 @@ defmodule Ecto.Adapters.Postgres.SQL do
     expr(left, sources) <> " = ANY (" <> expr(right, sources) <> ")"
   end
 
-  defp expr(Range[] = range, sources) do
+  defp expr((_ .. _) = range, sources) do
     expr(Enum.to_list(range), sources)
   end
 
