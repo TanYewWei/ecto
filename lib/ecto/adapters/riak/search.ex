@@ -112,7 +112,7 @@ defmodule Ecto.Adapters.Riak.Search do
   the search query in the execute/3 function below.
   """        
   @spec query(query) :: { query_tuple, post_proc_fun }
-  def query(Query[] = query) do    
+  def query(Query[] = query) do
     sources = create_names(query)  # :: [source]
     model = Util.model(query.from)
     search_index = RiakUtil.search_index(model)
