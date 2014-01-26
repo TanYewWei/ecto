@@ -118,9 +118,10 @@ defmodule Ecto.Adapters.Riak.Search do
     search_index = RiakUtil.search_index(model)
     bucket = RiakUtil.bucket(model)
     
-    ## Check to see if join is specified
-    ## and raise error if present
-    join(query) 
+    ## Check to see if unsupported queries are specified
+    ## and raise error if any are present
+    joins(query)
+    distincts(query)
 
     ## Build Query Part
     where  = SearchWhere.query(query.wheres, sources)
@@ -277,15 +278,24 @@ defmodule Ecto.Adapters.Riak.Search do
   end
 
   ## ----------------------------------------------------------------------
-  ## JOIN
+  ## Unsupported Queries
   ## ----------------------------------------------------------------------
   
-  defp join(query) do
+  defp joins(query) do
     case query.joins do
       [] ->
         nil
       _ ->
         raise Ecto.QueryError, reason: "Riak adapter does not support joins"
+    end
+  end
+
+  defp distincts(query) do
+    case query.distincts do
+      [] ->
+        nil
+      _ ->
+        raise Ecto.QueryError, reason: "Riak adapter does not support distinct queries"
     end
   end
 
