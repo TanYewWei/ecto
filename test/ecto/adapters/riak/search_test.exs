@@ -184,6 +184,15 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   test "group_by with having with select" do
     base = Post
     [_, p1, p2, p3, p4] = posts = mock_posts()
+
+    { _, post_proc } = group_by(base, [p], p.title)
+      |> select([p], p.id) |> normalize |> Search.query
+    IO.puts "test: #{inspect post_proc.(posts)}"
+
+    { _, post_proc } = group_by(base, [p], p.title)
+    |> having([p], avg(p.count) + 1 <= 5 * 2)
+      |> select([p], p.id) |> normalize |> Search.query
+    IO.puts "test 1: #{inspect post_proc.(posts)}"
     
     ## - avg aggregate function
     ## - having binary operators:

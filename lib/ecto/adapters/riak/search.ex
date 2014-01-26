@@ -340,7 +340,7 @@ defmodule Ecto.Adapters.Riak.Search do
           HashDict.update(dict, key, [entity], fn e -> [entity | e] end)
         end
         
-        Enum.reduce(entities, HashDict.new, fun) |> HashDict.values
+        Enum.reduce(entities, HashDict.new, fun) |> HashDict.values |> Enum.sort
     end
   end
 
