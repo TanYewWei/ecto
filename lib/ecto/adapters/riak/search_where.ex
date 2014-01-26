@@ -17,7 +17,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
     end)
   end
 
-  defp where_expr({ :., _, [{ :&, _, [_] }=var, field] }, sources) when is_atom(field) do
+  defp where_expr({ :., _, [{ :&, _, [_] } = var, field] }, sources) when is_atom(field) do
     source = Util.find_source(sources, var)
     entity = Util.entity(source)
     type = entity.__entity__(:field_type, field)
@@ -45,7 +45,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   end
 
   ## element in range or array
-  defp where_expr({ :in, _, [left, Range[first: first, last: last]] }, sources) do
+  defp where_expr({ :in, _, [left, first .. last] }, sources) do
     field = where_expr(left, sources)
     range_start = where_expr(first, sources)
     range_end = where_expr(last, sources)
@@ -62,7 +62,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   end
 
   ## range handling
-  defp where_expr(Range[] = range, sources) do
+  defp where_expr((_ .. _) = range, sources) do
     where_expr(Enum.to_list(range), sources)
   end
 

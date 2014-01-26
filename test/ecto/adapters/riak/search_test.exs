@@ -16,13 +16,13 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   end
 
   test "from" do
-    query = from(p in Post) |> normalize
+    query = from(p in Post, []) |> normalize
     { { _ , _, querystring, _ }, _ } = Search.query(query)
     assert "*:*" == querystring
   end
 
   test "where clause" do
-    base = from(p in Post)
+    base = Post
 
     ## basic
     where(base, [p], nil)
@@ -46,7 +46,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
 
     ## arrays
     insert_var = 5
-    where(base, [p], p.count in array([1,^insert_var,3], ^:integer))
+    where(base, [p], p.count in array([1, ^insert_var, 3], ^:integer))
     |> test_query "count_i:(1 #{insert_var} 3)"
 
     where(base, [p], p.title in array(%w(abc def), ^:string))
@@ -82,7 +82,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   end
 
   test "select clause" do
-    base = from(p in Post)
+    base = Post
     post = mock_post
 
     query = select(base, [p], p) |> normalize
@@ -127,7 +127,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   end
 
   test "custom functions in select are ignored" do
-    base = from(p in Post)
+    base = Post
     post = mock_post
 
     query = base |> select([p], custom(p.id)) |> normalize
@@ -136,7 +136,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   end
 
   test "group_by with select" do
-    base = from(p in Post)
+    base = Post
     [p0, p1, p2, p3, p4] = posts = mock_posts()
     
     ## avg
@@ -182,7 +182,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   end
 
   test "group_by with having with select" do
-    base = from(p in Post)
+    base = Post
     [_, p1, p2, p3, p4] = posts = mock_posts()
     
     ## - avg aggregate function
@@ -256,7 +256,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   end
 
   test "order_by" do
-    base = from(p in Post)
+    base = Post
     [p0, p1, p2, p3, p4] = posts = mock_posts()
 
     { _, post_proc } = order_by(base, [p], p.title)

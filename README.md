@@ -238,7 +238,7 @@ end
 Last but not least, Ecto allows you to write queries in Elixir and send them to the repository, which translates them to the underlying database. Let's see an example:
 
 ```elixir
-use Ecto.Query
+import Ecto.Query, only: [from: 2]
 
 query = from w in Weather,
       where: w.prcp > 0 or w.prcp == nil,
@@ -249,6 +249,7 @@ Repo.all(query)
 
 Queries are defined and extended with the `from` macro. The supported keywords are:
 
+* `:distinct`
 * `:where`
 * `:order_by`
 * `:offset`

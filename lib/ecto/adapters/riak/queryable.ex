@@ -4,7 +4,7 @@ defmodule Ecto.RiakModel.Queryable do
   @doc false
   defmacro __using__(_) do
     quote do
-      use Ecto.Query
+      import Ecto.Query, only: [from: 2]
       require Ecto.Model.Queryable
       import unquote(__MODULE__)
     end

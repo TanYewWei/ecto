@@ -112,15 +112,16 @@ defmodule Ecto.Adapters.Riak.Search do
   the search query in the execute/3 function below.
   """        
   @spec query(query) :: { query_tuple, post_proc_fun }
-  def query(Query[] = query) do    
+  def query(Query[] = query) do
     sources = create_names(query)  # :: [source]
     model = Util.model(query.from)
     search_index = RiakUtil.search_index(model)
     bucket = RiakUtil.bucket(model)
     
-    ## Check to see if join is specified
-    ## and raise error if present
-    join(query) 
+    ## Check to see if unsupported queries are specified
+    ## and raise error if any are present
+    joins(query)
+    distincts(query)
 
     ## Build Query Part
     where  = SearchWhere.query(query.wheres, sources)
@@ -277,15 +278,24 @@ defmodule Ecto.Adapters.Riak.Search do
   end
 
   ## ----------------------------------------------------------------------
-  ## JOIN
+  ## Unsupported Queries
   ## ----------------------------------------------------------------------
   
-  defp join(query) do
+  defp joins(query) do
     case query.joins do
       [] ->
         nil
       _ ->
         raise Ecto.QueryError, reason: "Riak adapter does not support joins"
+    end
+  end
+
+  defp distincts(query) do
+    case query.distincts do
+      [] ->
+        nil
+      _ ->
+        raise Ecto.QueryError, reason: "Riak adapter does not support distinct queries"
     end
   end
 
@@ -330,7 +340,7 @@ defmodule Ecto.Adapters.Riak.Search do
           HashDict.update(dict, key, [entity], fn e -> [entity | e] end)
         end
         
-        Enum.reduce(entities, HashDict.new, fun) |> HashDict.values
+        Enum.reduce(entities, HashDict.new, fun) |> HashDict.values |> Enum.sort
     end
   end
 
