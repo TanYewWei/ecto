@@ -14,7 +14,7 @@ defmodule Ecto.Repo.Backend do
     adapter.storage_up(parse_url(repo.url))
   end
 
-  def storage_down(repo, adapter) do 
+  def storage_down(repo, adapter) do
     adapter.storage_down(parse_url(repo.url))
   end
 
@@ -119,7 +119,7 @@ defmodule Ecto.Repo.Backend do
   end
 
   defp parse_url(url) do
-    unless url =~ %r/^[^:\/?#\s]+:\/\// do
+    unless String.match? url, %r/^[^:\/?#\s]+:\/\// do
       raise Ecto.InvalidURL, url: url, reason: "url should start with a scheme, host should start with //"
     end
 
@@ -129,7 +129,7 @@ defmodule Ecto.Repo.Backend do
       raise Ecto.InvalidURL, url: url, reason: "url has to contain a username"
     end
 
-    unless info.path =~ %r"^/([^/])+$" do
+    unless String.match? info.path, %r"^/([^/])+$" do
       raise Ecto.InvalidURL, url: url, reason: "path should be a database name"
     end
 
