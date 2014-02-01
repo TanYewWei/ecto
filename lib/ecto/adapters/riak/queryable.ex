@@ -40,7 +40,7 @@ defmodule Ecto.RiakModel.Queryable do
     add_riak_fields({ :__block__, [], [field_block] })
   end
 
-  defp add_riak_fields({ :__block__, _, fields }) do    
+  defp add_riak_fields({ :__block__, _, fields }) when is_list(fields) do
     version_field = { :field, [], [:riak_version, :integer, [default: 0]] }
     vclock_field  = { :field, [], [:riak_vclock, :virtual] }
     context_field = { :field, [], [:riak_context, :virtual, [default: []]]  }
