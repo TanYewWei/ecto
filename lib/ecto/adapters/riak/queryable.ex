@@ -12,7 +12,7 @@ defmodule Ecto.RiakModel.Queryable do
   
   defmacro queryable(source, entity) # do
 
-  defmacro queryable(source, opts // [], do: block)
+  defmacro queryable(source, opts \\ [], do: block)
 
   defmacro queryable(source, opts, [do: block]) do
     quote do

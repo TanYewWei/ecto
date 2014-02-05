@@ -2,7 +2,7 @@ defmodule Ecto.Adapters.Riak.ETS do
   @table_name  :ecto_riak_adapter
 
   @spec get(term, term) :: tuple
-  def get(key, default // nil) do
+  def get(key, default \\ nil) do
     case :ets.lookup(@table_name, key) do
       [{ _, x }] -> x
       _          -> default

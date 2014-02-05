@@ -17,7 +17,7 @@ defmodule Ecto.Adapters.Riak.Validators do
     end
   end
 
-  def maybe_validate_is_binary(attr, value, opts // []) do
+  def maybe_validate_is_binary(attr, value, opts \\ []) do
     if nil?(value) do
       []
     else
@@ -25,7 +25,7 @@ defmodule Ecto.Adapters.Riak.Validators do
     end
   end
 
-  def validate_is_binary(attr, value, opts // []) do
+  def validate_is_binary(attr, value, opts \\ []) do
     if is_binary(value) do
       []
     else
@@ -33,7 +33,7 @@ defmodule Ecto.Adapters.Riak.Validators do
     end
   end
 
-  def validate_is_integer(attr, value, opts // []) do
+  def validate_is_integer(attr, value, opts \\ []) do
     if is_integer(value) do
       []
     else
@@ -41,7 +41,7 @@ defmodule Ecto.Adapters.Riak.Validators do
     end
   end
 
-  def validate_is_list(attr, value, opts // []) do
+  def validate_is_list(attr, value, opts \\ []) do
     if is_list(value) do
       []
     else

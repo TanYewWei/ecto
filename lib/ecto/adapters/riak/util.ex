@@ -69,7 +69,7 @@ defmodule Ecto.Adapters.Riak.Util do
   """
   @spec entity_keyword(entity) :: Keyword.t
   def entity_keyword(entity) do
-    elem(entity, 0).__entity__(:entity_kw, entity, primary_key: true)
+    elem(entity, 0).__entity__(:keywords, entity, primary_key: true)
   end
   
   @doc """
