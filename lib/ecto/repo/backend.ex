@@ -112,7 +112,12 @@ defmodule Ecto.Repo.Backend do
     adapter.transaction(repo, fun)
   end
 
+
   ## Helpers  
+
+  def rollback(repo, adapter, value) do
+    adapter.rollback(repo, value)
+  end
 
   defp parse_url(urls) when is_list(urls) do
     Enum.map(urls, &parse_url/1)
