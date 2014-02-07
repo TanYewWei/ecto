@@ -46,6 +46,21 @@ defmodule Ecto.Query.NormalizerTest do
     query = from(p in Post, join: c in p.comments, on: c.text == "") |> normalize
     assert JoinExpr[on: on] = hd(query.joins)
     assert Macro.to_string(on.expr) == "&1.text() == \"\" and &1.post_id() == &0.id()"
+
+    ## This DOES NOT fail
+    query = from(Post, []) |> join(:inner, [p], c in p.comments, c.text == "") |> normalize
+    assert JoinExpr[on: on] = hd(query.joins)
+    assert Macro.to_string(on.expr) == "&1.text() == \"\" and &1.post_id() == &0.id()"
+
+    ## This also DOES NOT fail
+    query = Post |> join(:inner, [p], c in Ecto.Query.ValidatorTest.Comment, c.text == "") |> normalize
+    assert JoinExpr[on: on] = hd(query.joins)
+    assert Macro.to_string(on.expr) == "&1.text() == \"\""
+
+    ## This FAILS
+    query = Post |> join(:inner, [p], c in p.comments, c.text == "") |> normalize
+    assert JoinExpr[on: on] = hd(query.joins)
+    assert Macro.to_string(on.expr) == "&1.text() == \"\" and &1.post_id() == &0.id()"
   end
 
   test "normalize joins: cannot associate without entity" do
