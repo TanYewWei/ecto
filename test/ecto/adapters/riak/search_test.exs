@@ -49,7 +49,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
     where(base, [p], p.count in array([1, ^insert_var, 3], ^:integer))
     |> test_query "count_i:(1 #{insert_var} 3)"
 
-    where(base, [p], p.title in array(%w(abc def), ^:string))
+    where(base, [p], p.title in array(~w(abc def), ^:string))
     |> test_query "title_s:(abc def)"
 
     ## like

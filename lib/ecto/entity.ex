@@ -31,8 +31,10 @@ defmodule Ecto.Entity do
                                         reflection;
   * `__entity__(:primary_key)` - Returns the field that is the primary key or
                                  `nil` if there is none;
-  * `__entity__(:allocate, values) - Creates a new entity record from the given
-                                     field values;
+  * `__entity__(:allocate, values)` - Creates a new entity record from the given
+                                      field values;
+  * `__entity__(:keywords, entity)` - Return a keyword list of all non-virtual
+                                      fields and their values;
 
   ## Example
 
@@ -79,13 +81,13 @@ defmodule Ecto.Entity do
     * `:primary_key` - Sets the field to be the primary key, the default
       primary key have to be overridden by setting its name to `nil`;
   """
-  defmacro field(name, type // :string, opts // []) do
+  defmacro field(name, type \\ :string, opts \\ []) do
     quote do
       Ecto.Entity.__field__(__MODULE__, unquote(name), unquote(type), unquote(opts))
     end
   end
 
-  @doc %S"""
+  @doc ~S"""
   Indicates a one-to-many association with another queryable, where this entity
   has zero or more records of the queryable structure. The other queryable often
   has a `belongs_to` field with the reverse association.
@@ -130,13 +132,13 @@ defmodule Ecto.Entity do
                      select: assoc(p, c)))
       post.comments.to_list #=> [ Comment.Entity[...], ... ]
   """
-  defmacro has_many(name, queryable, opts // []) do
+  defmacro has_many(name, queryable, opts \\ []) do
     quote do
       Ecto.Entity.__has_many__(__MODULE__, unquote(name), unquote(queryable), unquote(opts))
     end
   end
 
-  @doc %S"""
+  @doc ~S"""
   Indicates a one-to-one association with another queryable, where this entity
   has zero or one records of the queryable structure. The other queryable often
   has a `belongs_to` field with the reverse association.
@@ -177,13 +179,13 @@ defmodule Ecto.Entity do
                      select: assoc(p, pl)))
       post.permalink.get #=> Permalink.Entity[...]
   """
-  defmacro has_one(name, queryable, opts // []) do
+  defmacro has_one(name, queryable, opts \\ []) do
     quote do
       Ecto.Entity.__has_one__(__MODULE__, unquote(name), unquote(queryable), unquote(opts))
     end
   end
 
-  @doc %S"""
+  @doc ~S"""
   Indicates a one-to-one association with another queryable, this entity
   belongs to zero or one records of the queryable structure. The other queryable
   often has a `has_one` or a `has_many` field with the reverse association.
@@ -227,7 +229,7 @@ defmodule Ecto.Entity do
                         select: assoc(c, p)))
       comment.post.get #=> Post.Entity[...]
   """
-  defmacro belongs_to(name, queryable, opts // []) do
+  defmacro belongs_to(name, queryable, opts \\ []) do
     quote do
       Ecto.Entity.__belongs_to__(__MODULE__, unquote(name), unquote(queryable), unquote(opts))
     end
@@ -434,8 +436,7 @@ defmodule Ecto.Entity do
             entity.unquote(virtual_name)(assoc)
           end
         else
-          def unquote(name)(value, __MODULE__[unquote_splicing(record_args)] = entity)
-              when is_record(value, unquote(opts[:queryable])) do
+          def unquote(name)(value, __MODULE__[unquote_splicing(record_args)] = entity) do
             assoc = assoc.__assoc__(:loaded, value)
             entity.unquote(virtual_name)(assoc)
           end
@@ -475,7 +476,7 @@ defmodule Ecto.Entity do
         __MODULE__.new(zip)
       end
 
-      def __entity__(:keywords, entity, opts // []) do
+      def __entity__(:keywords, entity, opts \\ []) do
         keep_pk     = Keyword.get(opts, :primary_key, true)
         primary_key = __entity__(:primary_key)
 

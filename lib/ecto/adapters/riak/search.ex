@@ -170,7 +170,7 @@ defmodule Ecto.Adapters.Riak.Search do
     ## returns true if the query is intended to only
     ## get a single riak object
     { _, _, querystring, opts } = query_tuple
-    case Regex.split(%r":", querystring) do
+    case Regex.split(~r":", querystring) do
       [k, v] when is_binary(k) and is_binary(v) and k != "*" and v != "*" ->
         String.ends_with?(k, "_s") &&
           Keyword.get(opts, :rows) == 1
@@ -182,7 +182,7 @@ defmodule Ecto.Adapters.Riak.Search do
   defp execute_get(worker, query_tuple) do
     { _, bucket, querystring, _ } = query_tuple
     
-    [_, key] = Regex.split(%r":", querystring)
+    [_, key] = Regex.split(~r":", querystring)
     key = String.strip(key, hd ')')
     
     case RiakSocket.get(worker, bucket, key) do

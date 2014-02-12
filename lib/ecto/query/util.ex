@@ -44,17 +44,17 @@ defmodule Ecto.Query.Util do
 
   @doc false
   defmacro types do
-    %w(boolean string integer float decimal binary datetime interval virtual)a
+    ~w(boolean string integer float decimal binary datetime interval virtual)a
   end
 
   @doc false
   defmacro poly_types do
-    %w(array)a
+    ~w(array)a
   end
 
   # Takes an elixir value an returns its ecto type
   @doc false
-  def value_to_type(value, fun // nil)
+  def value_to_type(value, fun \\ nil)
 
   def value_to_type(nil, _fun), do: { :ok, nil }
   def value_to_type(value, _fun) when is_boolean(value), do: { :ok, :boolean }

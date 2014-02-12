@@ -67,7 +67,7 @@ defmodule Ecto.Adapters.Postgres do
 
     case query(repo, SQL.insert(entity, returning)) do
       Postgrex.Result[rows: [values]] ->
-        #Setup the entity to use the RETURNING values
+        # Setup the entity to use the RETURNING values
         Enum.zip(returning, tuple_to_list(values)) |> entity.update
       _ ->
         entity
@@ -94,9 +94,11 @@ defmodule Ecto.Adapters.Postgres do
     nrows
   end
 
-  def query(repo, sql) do
-    use_worker(repo, fn worker ->
-      Worker.query!(worker, sql)
+  def query(repo, sql, params \\ []) do
+    repo.log({ :query, sql }, fn ->
+      use_worker(repo, fn worker ->
+        Worker.query!(worker, sql, params)
+      end)
     end)
   end
 
@@ -203,20 +205,24 @@ defmodule Ecto.Adapters.Postgres do
   def transaction(repo, fun) do
     worker = checkout_worker(repo)
     try do
-      Worker.begin!(worker)
+      do_begin(repo, worker)
       value = fun.()
-      Worker.commit!(worker)
+      do_commit(repo, worker)
       { :ok, value }
     catch
-      :throw, :ecto_rollback ->
-        Worker.rollback!(worker)
-        :error
+      :throw, { :ecto_rollback, value } ->
+        do_rollback(repo, worker)
+        { :error, value }
       type, term ->
-        Worker.rollback!(worker)
+        do_rollback(repo, worker)
         :erlang.raise(type, term, System.stacktrace)
     after
       checkin_worker(repo)
     end
+  end
+
+  def rollback(_repo, value) do
+    throw { :ecto_rollback, value }
   end
 
   defp use_worker(repo, fun) do
@@ -268,19 +274,37 @@ defmodule Ecto.Adapters.Postgres do
     :ok
   end
 
+  defp do_begin(repo, worker) do
+    repo.log(:begin, fn ->
+      Worker.begin!(worker)
+    end)
+  end
+
+  defp do_rollback(repo, worker) do
+    repo.log(:begin, fn ->
+      Worker.rollback!(worker)
+    end)
+  end
+
+  defp do_commit(repo, worker) do
+    repo.log(:begin, fn ->
+      Worker.commit!(worker)
+    end)
+  end
+
   ## Test transaction API
 
   def begin_test_transaction(repo) do
     pool = repo.__postgres__(:pool_name)
     :poolboy.transaction(pool, fn worker ->
-      Worker.begin!(worker)
+      do_begin(repo, worker)
     end)
   end
 
   def rollback_test_transaction(repo) do
     pool = repo.__postgres__(:pool_name)
     :poolboy.transaction(pool, fn worker ->
-      Worker.rollback!(worker)
+      do_rollback(repo, worker)
     end)
   end
 
@@ -288,7 +312,7 @@ defmodule Ecto.Adapters.Postgres do
 
   def storage_up(opts) do
     #TODO: allow the user to specify those options either in the Repo or on command line
-    database_options = %s(ENCODING='UTF8' LC_COLLATE='en_US.UTF-8' LC_CTYPE='en_US.UTF-8')
+    database_options = ~s(ENCODING='UTF8' LC_COLLATE='en_US.UTF-8' LC_CTYPE='en_US.UTF-8')
 
     output = run_with_psql opts, "CREATE DATABASE #{ opts[:database] } " <> database_options
 
@@ -313,14 +337,14 @@ defmodule Ecto.Adapters.Postgres do
     command = ""
 
     if password = database[:password] do
-      command = %s(PGPASSWORD=#{ password } )
+      command = ~s(PGPASSWORD=#{ password } )
     end
 
     command =
       command <>
-      %s(psql --quiet -U #{ database[:username] } ) <>
-      %s(--host #{ database[:hostname] } ) <>
-      %s(-c "#{ sql_command };" )
+      ~s(psql --quiet -U #{ database[:username] } ) <>
+      ~s(--host #{ database[:hostname] } ) <>
+      ~s(-c "#{ sql_command };" )
 
     System.cmd command
   end
@@ -330,9 +354,11 @@ defmodule Ecto.Adapters.Postgres do
   def migrate_up(repo, version, commands) do
     case check_migration_version(repo, version) do
       Postgrex.Result[num_rows: 0] ->
-        run_commands(repo, commands, fn ->
+        transaction(repo, fn ->
+          Enum.each(commands, &query(repo, &1))
           insert_migration_version(repo, version)
         end)
+        :ok
       _ ->
         :already_up
     end
@@ -343,20 +369,12 @@ defmodule Ecto.Adapters.Postgres do
       Postgrex.Result[num_rows: 0] ->
         :missing_up
       _ ->
-        run_commands(repo, commands, fn ->
+        transaction(repo, fn ->
+          Enum.each(commands, &query(repo, &1))
           delete_migration_version(repo, version)
         end)
+        :ok
     end
-  end
-
-  defp run_commands(repo, commands, fun) do
-    transaction(repo, fn ->
-      Enum.each(commands, fn command ->
-        query(repo, command)
-        fun.()
-      end)
-    end)
-    :ok
   end
 
   def migrated_versions(repo) do

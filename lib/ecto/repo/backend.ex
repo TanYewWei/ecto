@@ -112,14 +112,19 @@ defmodule Ecto.Repo.Backend do
     adapter.transaction(repo, fun)
   end
 
+
   ## Helpers  
+
+  def rollback(repo, adapter, value) do
+    adapter.rollback(repo, value)
+  end
 
   defp parse_url(urls) when is_list(urls) do
     Enum.map(urls, &parse_url/1)
   end
 
   defp parse_url(url) do
-    unless String.match? url, %r/^[^:\/?#\s]+:\/\// do
+    unless String.match? url, ~r/^[^:\/?#\s]+:\/\// do
       raise Ecto.InvalidURL, url: url, reason: "url should start with a scheme, host should start with //"
     end
 
@@ -129,7 +134,7 @@ defmodule Ecto.Repo.Backend do
       raise Ecto.InvalidURL, url: url, reason: "url has to contain a username"
     end
 
-    unless String.match? info.path, %r"^/([^/])+$" do
+    unless String.match? info.path, ~r"^/([^/])+$" do
       raise Ecto.InvalidURL, url: url, reason: "path should be a database name"
     end
 

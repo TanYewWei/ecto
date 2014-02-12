@@ -296,7 +296,7 @@ defmodule Ecto.Adapters.Riak.Migration do
   end
 
   defp entity_prefix(mod) when is_atom(mod) do
-    regex = %r"^(.*)(\..*)$"
+    regex = ~r"^(.*)(\..*)$"
     res = Regex.run(regex, to_string(mod))
     if is_list(res) do
       Enum.slice(res, -2..-2)  ## get second last capture group

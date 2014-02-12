@@ -8,11 +8,11 @@ defmodule Ecto.Migrator do
         use Ecto.Migration
 
         def up do
-          "CREATE TABLE user(id serial PRIMARY_KEY, username text)"
+          "CREATE TABLE users(id serial PRIMARY_KEY, username text)"
         end
 
         def down do
-          "DROP TABLE user"
+          "DROP TABLE users"
         end
       end
 
@@ -108,7 +108,7 @@ defmodule Ecto.Migrator do
   defp migrations_for(directory) do
     Path.join(directory, "*")
       |> Path.wildcard
-      |> Enum.filter(&Regex.match?(%r"\d+_.+\.exs$", &1))
+      |> Enum.filter(&Regex.match?(~r"\d+_.+\.exs$", &1))
       |> attach_versions
   end
 
