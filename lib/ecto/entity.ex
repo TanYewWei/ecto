@@ -31,8 +31,10 @@ defmodule Ecto.Entity do
                                         reflection;
   * `__entity__(:primary_key)` - Returns the field that is the primary key or
                                  `nil` if there is none;
-  * `__entity__(:allocate, values) - Creates a new entity record from the given
-                                     field values;
+  * `__entity__(:allocate, values)` - Creates a new entity record from the given
+                                      field values;
+  * `__entity__(:keywords, entity)` - Return a keyword list of all non-virtual
+                                      fields and their values;
 
   ## Example
 
@@ -85,7 +87,7 @@ defmodule Ecto.Entity do
     end
   end
 
-  @doc %S"""
+  @doc ~S"""
   Indicates a one-to-many association with another queryable, where this entity
   has zero or more records of the queryable structure. The other queryable often
   has a `belongs_to` field with the reverse association.
@@ -136,7 +138,7 @@ defmodule Ecto.Entity do
     end
   end
 
-  @doc %S"""
+  @doc ~S"""
   Indicates a one-to-one association with another queryable, where this entity
   has zero or one records of the queryable structure. The other queryable often
   has a `belongs_to` field with the reverse association.
@@ -183,7 +185,7 @@ defmodule Ecto.Entity do
     end
   end
 
-  @doc %S"""
+  @doc ~S"""
   Indicates a one-to-one association with another queryable, this entity
   belongs to zero or one records of the queryable structure. The other queryable
   often has a `has_one` or a `has_many` field with the reverse association.
@@ -434,8 +436,7 @@ defmodule Ecto.Entity do
             entity.unquote(virtual_name)(assoc)
           end
         else
-          def unquote(name)(value, __MODULE__[unquote_splicing(record_args)] = entity)
-              when is_record(value, unquote(opts[:queryable])) do
+          def unquote(name)(value, __MODULE__[unquote_splicing(record_args)] = entity) do
             assoc = assoc.__assoc__(:loaded, value)
             entity.unquote(virtual_name)(assoc)
           end

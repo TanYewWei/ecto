@@ -20,7 +20,7 @@ defmodule Ecto.Adapters.Riak.Datetime do
 
   def parse(x) do
     [ year, month, day, hour, min, sec ] =
-      (String.split(x, %r"-|:|T|Z", trim: true)
+      (String.split(x, ~r"-|:|T|Z", trim: true)
        |> Enum.map(fn bin ->
             { int, _ } = Integer.parse(bin)
             int

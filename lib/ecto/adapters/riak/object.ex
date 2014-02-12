@@ -281,7 +281,7 @@ defmodule Ecto.Adapters.Riak.Object do
   ## Key and Value De/Serialization
   ## ----------------------------------------------------------------------
 
-  @yz_key_regex  %r"_(i|is|f|fs|b|bs|b64_s|b64_ss|s|ss|i_dt|i_dts|dt|dts)$"
+  @yz_key_regex  ~r"_(i|is|f|fs|b|bs|b64_s|b64_ss|s|ss|i_dt|i_dts|dt|dts)$"
 
   @spec key_from_yz(binary) :: binary
   def key_from_yz(key) do
