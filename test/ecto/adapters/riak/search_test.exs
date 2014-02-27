@@ -9,10 +9,22 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   alias Ecto.Adapters.Riak.Search
   alias Ecto.Adapters.Riak.Datetime
   alias Ecto.Test.Riak.Post
+  alias Ecto.Test.Riak.Comment
   
   defp test_query(query, expected) do
     { { _, _, querystring, _ }, _ } = Search.query(query |> normalize)
     assert expected == querystring
+  end
+
+  test "unsupported operations" do
+    query = Post |> join(:inner, [p], c in Comment, c.post_id == p.id) |> normalize
+    assert_raise Ecto.QueryError, fn -> Search.query(query) end
+
+    query = Post |> distinct([c], c.post_id) |> normalize
+    assert_raise Ecto.QueryError, fn -> Search.query(query) end
+
+    query = Post |> lock(true) |> normalize
+    assert_raise Ecto.QueryError, fn -> Search.query(query) end
   end
 
   test "from" do
