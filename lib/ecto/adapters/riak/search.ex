@@ -121,6 +121,7 @@ defmodule Ecto.Adapters.Riak.Search do
     ## Check to see if unsupported queries are specified
     ## and raise error if any are present
     joins(query)
+    lock(query)
     distincts(query)
 
     ## Build Query Part
@@ -287,6 +288,12 @@ defmodule Ecto.Adapters.Riak.Search do
         nil
       _ ->
         raise Ecto.QueryError, reason: "Riak adapter does not support joins"
+    end
+  end
+
+  defp lock(query) do
+    if query.lock do
+      raise Ecto.QueryError, reason: "Riak adapter does not support locks"
     end
   end
 
