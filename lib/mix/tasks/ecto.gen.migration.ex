@@ -9,18 +9,22 @@ defmodule Mix.Tasks.Ecto.Gen.Migration do
   @moduledoc """
   Generates a migration for the given repository.
 
+  ## Command line options
+
+  * `--no-start` - do not start applications
+
   ## Examples
 
       mix ecto.gen.migration MyApp.Repo add_posts_table
-
   """
   def run(args) do
-    Mix.Task.run "compile"
+    no_umbrella!("ecto.gen.migration")
+    Mix.Task.run "app.start", args
 
     case parse_repo(args) do
       { repo, [name] } ->
         ensure_repo(repo)
-        path = migrations_path(repo)
+        path = Path.relative_to(migrations_path(repo), Mix.Project.app_path)
         file = Path.join(path, "#{timestamp}_#{name}.exs")
         create_directory path
         create_file file, migration_template(mod: Module.concat([repo, Migrations, camelize(name)]))
