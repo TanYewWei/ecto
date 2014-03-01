@@ -1,4 +1,4 @@
-alias Ecto.Adapters.Riak.Datetime
+alias Ecto.Adapters.Riak.DateTime
 alias Ecto.Adapters.Riak.Util, as: RiakUtil
 alias Ecto.Adapters.Riak.Object
 
@@ -121,7 +121,7 @@ defmodule Ecto.Adapters.Riak.MigrationTest.Model.Ver1 do
 
     ## Create default value for :datetime, 
     ## but leave other atttributes untouched
-    attr = Keyword.put(attr, :datetime, Datetime.now_local_ecto_datetime)
+    attr = Keyword.put(attr, :datetime, DateTime.now_local_ecto)
 
     ## Add new :virtual field
     attr = Keyword.put(attr, :virtual, { :some, "random", 'tuple' })

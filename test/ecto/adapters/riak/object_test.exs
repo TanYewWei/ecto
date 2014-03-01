@@ -4,8 +4,7 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
   use ExUnit.Case, async: true
 
   alias Ecto.Test.Riak.Post
-  alias Ecto.Adapters.Riak.Datetime
-  alias Ecto.Adapters.Riak.JSON
+  alias Ecto.Adapters.Riak.DateTime
   alias Ecto.Adapters.Riak.Object
   alias Ecto.Adapters.Riak.RequiredFieldUndefinedError
   
@@ -56,9 +55,9 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
 
     selected = Object.entity_to_object(e2)
     
-    j0 = Object.entity_to_object(e0) |> object_updatedvalue |> JSON.decode
-    j1 = Object.entity_to_object(e1) |> object_updatedvalue |> JSON.decode
-    j2 = Object.entity_to_object(e2) |> object_updatedvalue |> JSON.decode
+    j0 = Object.entity_to_object(e0) |> object_updatedvalue |> JSON.decode!
+    j1 = Object.entity_to_object(e1) |> object_updatedvalue |> JSON.decode!
+    j2 = Object.entity_to_object(e2) |> object_updatedvalue |> JSON.decode!
     
     entity = Object.resolve_siblings([ j0, j1, j2 ], selected)
     assert entity.id == e0.id
@@ -82,7 +81,7 @@ defmodule Ecto.Adapters.Riak.ObjectTest do
              count: 4,
              rating: 5,
              tags: ["some", "tags", "here"],
-             posted: Datetime.now_ecto_datetime,
+             posted: DateTime.now_ecto,
              temp: "test temp")
   end  
   

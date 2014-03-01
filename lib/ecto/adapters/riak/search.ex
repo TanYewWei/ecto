@@ -6,7 +6,6 @@ defmodule Ecto.Adapters.Riak.Search do
   see -- http://wiki.apache.org/solr/CommonQueryParameters
   """
 
-  require Ecto.Adapters.Riak.Datetime
   alias Ecto.Adapters.Riak.Migration
   alias Ecto.Adapters.Riak.Object
   alias Ecto.Adapters.Riak.SearchHaving
