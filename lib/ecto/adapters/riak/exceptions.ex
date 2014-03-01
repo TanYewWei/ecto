@@ -38,3 +38,5 @@ defexception Ecto.Adapters.Riak.RequiredFieldUndefinedError,
     """
   end
 end
+
+defexception Ecto.Adapters.Riak.DateTimeError, [:message]

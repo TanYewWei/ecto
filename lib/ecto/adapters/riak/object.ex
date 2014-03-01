@@ -1,7 +1,6 @@
-defmodule Ecto.Adapters.Riak.Object do
+!defmodule Ecto.Adapters.Riak.Object do
   alias :riakc_obj, as: RiakObject
-  alias Ecto.Adapters.Riak.Datetime
-  alias Ecto.Adapters.Riak.JSON
+  alias Ecto.Adapters.Riak.DateTime
   alias Ecto.Adapters.Riak.RequiredFieldUndefinedError
   alias Ecto.Adapters.Riak.Util, as: RiakUtil
 
@@ -9,7 +8,7 @@ defmodule Ecto.Adapters.Riak.Object do
   @type ecto_type   :: Ecto.DateTime | Ecto.Interval | Ecto.Binary
   @type entity_type :: Ecto.Entity
   @type entity      :: Ecto.Entity.t
-  @type json        :: JSON.json
+  @type json        :: HashDict.t | ListDict.t
   @type object      :: :riakc_obj.object
 
   @content_type         'application/json'
@@ -34,15 +33,15 @@ defmodule Ecto.Adapters.Riak.Object do
       json_key = yz_key(to_string(key), type)
       json_val = cond do
         is_record(val, Ecto.DateTime) ->
-          Datetime.datetime_to_string(val)
+          DateTime.to_str(val)
         is_record(val, Ecto.Interval) ->
-          Datetime.interval_to_string(val)
+          DateTime.to_str(val)
         is_record(val, Ecto.Binary) ->
           :base64.encode(val.value)
         is_record(val, Ecto.Array) ->
           val.value
         true ->
-          JSON.maybe_null(val)
+          val
       end
 
       if nil?(hash) || val_hash == hash do
@@ -60,7 +59,7 @@ defmodule Ecto.Adapters.Riak.Object do
     ## Form riak object
     bucket = RiakUtil.bucket(entity)
     key = entity.primary_key
-    value = JSON.encode({ kws })
+    value = JSON.encode!(kws)
     new_object = RiakObject.new(bucket, key, value, @content_type)
     cond do
       is_binary(entity.riak_vclock) ->
@@ -142,15 +141,15 @@ defmodule Ecto.Adapters.Riak.Object do
   def resolve_to_statebox(nil), do: nil
 
   def resolve_to_statebox(bin) when is_binary(bin) do
-    JSON.decode(bin) |> resolve_to_statebox
+    JSON.decode!(bin, as: HashDict) |> resolve_to_statebox
   end
 
-  def resolve_to_statebox({ inner } = json) do
+  def resolve_to_statebox(json) do
     { ops,        ## timestamp-independent ops
       timestamp,  ## timestamp to do :statebox.modify/3 with
       ts_ops      ## timestamp-dependent ops
     } =
-      Enum.reduce(inner, { [], 2, [] }, fn kv, acc ->
+      Enum.reduce(json, { [], 2, [] }, fn kv, acc ->
         { json_key, json_val } = kv
         { _ops, _timestamp, _ts_ops } = acc
         key_str = key_from_yz(json_key)
@@ -162,13 +161,12 @@ defmodule Ecto.Adapters.Riak.Object do
         else
           ## resolve last write with all other values
           ts_key = statebox_timestamp_key(key_str)   
-          ts = JSON.get(json, ts_key)
-          val = JSON.maybe_nil(json_val)
+          ts = Dict.get(json, ts_key)
           if ts do
             ts = if ts > _timestamp, do: ts, else: _timestamp
-            { _ops, ts, [:statebox_orddict.f_store(key, val) | _ts_ops] }
+            { _ops, ts, [:statebox_orddict.f_store(key, json_val) | _ts_ops] }
           else
-            { [:statebox_orddict.f_store(key, val) | _ops], _timestamp, _ts_ops }
+            { [:statebox_orddict.f_store(key, json_val) | _ops], _timestamp, _ts_ops }
           end
         end
       end)
@@ -215,9 +213,9 @@ defmodule Ecto.Adapters.Riak.Object do
           nil
         end
       :datetime ->
-        Datetime.parse_to_ecto_datetime(val)
+        DateTime.to_datetime(val)
       :interval ->
-        Datetime.parse_to_ecto_interval(val)
+        DateTime.to_interval(val)
       :integer when is_binary(val) ->
         case Integer.parse(val) do
           { i, _ } -> i

@@ -7,7 +7,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
   import Ecto.Query
   import Ecto.Query.Normalizer, only: [normalize: 1]
   alias Ecto.Adapters.Riak.Search
-  alias Ecto.Adapters.Riak.Datetime
+  alias Ecto.Adapters.Riak.DateTime
   alias Ecto.Test.Riak.Post
   alias Ecto.Test.Riak.Comment
   
@@ -69,16 +69,16 @@ defmodule Ecto.Adapters.Riak.SearchTest do
     |> test_query "text_s:*hello*"
     
     ## DateTime and Interval
-    datetime = Datetime.now_ecto_datetime()
-    datetime_str = Datetime.solr_datetime(datetime)
+    datetime = DateTime.now_ecto()
+    datetime_str = DateTime.solr_datetime(datetime)
     interval = Ecto.Interval.new(day: 1)
     ##query = where(base, [p], p.posted >= date_add(now(), ^interval))
 
-    interval_str = Datetime.solr_datetime_add(interval)
+    interval_str = DateTime.solr_datetime_add(interval)
     where(base, [p], p.posted > date_add(^datetime, ^interval))
     |> test_query "posted_dt:[#{datetime_str}#{interval_str} TO *]"
 
-    interval_str = Datetime.solr_datetime_subtract(interval)
+    interval_str = DateTime.solr_datetime_subtract(interval)
     where(base, [p], p.posted < date_sub(^datetime, ^interval))
     |> test_query "posted_dt:[* TO #{datetime_str}#{interval_str}]"
 
@@ -324,7 +324,7 @@ defmodule Ecto.Adapters.Riak.SearchTest do
              text: "test text",
              count: 4,
              rating: 4.9999,
-             posted: Datetime.now_ecto_datetime,
+             posted: DateTime.now_ecto,
              temp: "test temp")
   end
 

@@ -24,7 +24,6 @@ defmodule Ecto.Adapters.Riak do
 
   ## ----------------------------------------------------------------------
   ## Adapter API
-  ## ----------------------------------------------------------------------
 
   defmacro __using__(_opts) do
     quote do
@@ -253,11 +252,10 @@ defmodule Ecto.Adapters.Riak do
     end
     
     use_worker(repo, fun)
-  end
+  end  
   
   ## ----------------------------------------------------------------------
   ## Worker Pools
-  ## ----------------------------------------------------------------------
 
   defp use_worker(repo, fun) do
     ## Check if we're currently in a transaction,
@@ -274,10 +272,19 @@ defmodule Ecto.Adapters.Riak do
         { :error, rsn }
     end
   end
+
+  ## ----------------------------------------------------------------------
+  ## Storage API
+
+  def storage_up(opts) do
+    
+  end
+
+  def storage_down(opts) do
+  end
   
   ## ----------------------------------------------------------------------
   ## Util
-  ## ----------------------------------------------------------------------
 
   defp wait_until(fun), do: wait_until(fun, 5, 500)
 

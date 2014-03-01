@@ -79,10 +79,10 @@ defmodule Ecto.Adapters.Riak.SearchSelect do
         :random.uniform()
       :now ->
         ## GMT timestamp
-        Datetime.now_ecto_datetime()
+        DateTime.now_ecto()
       :localtimestamp ->
         ## timestamp with respect to the current timezone
-        Datetime.now_local_ecto_datetime()
+        DateTime.now_local_ecto()
       _ ->
         raise Ecto.QueryError, reason: "unsupported select function: #{fun}"
     end

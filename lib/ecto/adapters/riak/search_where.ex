@@ -2,7 +2,7 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   alias Ecto.Adapters.Riak.Object, as: RiakObj
   alias Ecto.Query.QueryExpr
   alias Ecto.Query.Util
-  require Ecto.Adapters.Riak.Datetime, as: Datetime
+  alias Ecto.Adapters.Riak.DateTime
 
   ## Constants
 
@@ -103,8 +103,8 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   defp where_expr({ fun, _, [left, right] }, sources)
   when is_atom(fun) and fun in @binary_ops do
     cond do
-      ## Datetime operations
-      not Datetime.ecto_timestamp?(left) and Datetime.ecto_timestamp?(right) ->
+      ## DateTime operations
+      not DateTime.ecto_timestamp?(left) and DateTime.ecto_timestamp?(right) ->
         left = op_to_binary(left, sources)
         right = op_to_binary(right, sources)
         case fun do
@@ -115,12 +115,12 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
           _ ->
             raise Ecto.QueryError, reason: "where query invalid function #{fun} for right-side datetime"
         end
-      Datetime.ecto_timestamp?(left) and Datetime.ecto_timestamp?(right) ->
+      DateTime.ecto_timestamp?(left) and DateTime.ecto_timestamp?(right) ->
         case fun do
           :date_add ->
-            Datetime.solr_datetime(left) <> Datetime.solr_datetime_add(right)
+            DateTime.solr_datetime(left) <> DateTime.solr_datetime_add(right)
           :date_sub ->
-            Datetime.solr_datetime(left) <> Datetime.solr_datetime_subtract(right)
+            DateTime.solr_datetime(left) <> DateTime.solr_datetime_subtract(right)
           _ ->
             raise Ecto.QueryError, reason: "where query invalid function #{fun} for datetime args"
         end
@@ -204,11 +204,11 @@ defmodule Ecto.Adapters.Riak.SearchWhere  do
   defp literal(false), do: "false"
 
   defp literal(Ecto.DateTime[] = dt) do
-    Datetime.solr_datetime(dt)
+    DateTime.solr_datetime(dt)
   end
 
   defp literal(Ecto.Interval[] = i) do
-    Datetime.solr_datetime(i)
+    DateTime.solr_datetime(i)
   end
 
   defp literal(Ecto.Binary[value: binary]) do
