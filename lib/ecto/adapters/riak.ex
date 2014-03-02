@@ -1,5 +1,6 @@
 defmodule Ecto.Adapters.Riak do
   @behaviour Ecto.Adapter
+  @behaviour Ecto.Adapter.Storage
 
   @bucket_name  "50"
   @bucket_type  "map"
@@ -29,10 +30,6 @@ defmodule Ecto.Adapters.Riak do
     quote do
       def __riak__(:pool_group) do
         __MODULE__.PoolGroup
-      end
-
-      def __riak__(:schema) do
-        __MODULE__.Schema
       end
     end
   end
@@ -258,8 +255,6 @@ defmodule Ecto.Adapters.Riak do
   ## Worker Pools
 
   defp use_worker(repo, fun) do
-    ## Check if we're currently in a transaction,
-    ## and make use of existing worker if it exists       
     pool_group = repo.__riak__(:pool_group)
     case Pool.take_group_member(pool_group) do
       worker when is_pid(worker) ->
@@ -276,11 +271,72 @@ defmodule Ecto.Adapters.Riak do
   ## ----------------------------------------------------------------------
   ## Storage API
 
+  @doc """
+  Creates the appropriate 
+  """
   def storage_up(opts) do
-    
+    riak_admin_script = opts[:riak_admin]
+    ensure_riak_admin_script!(riak_admin_script)
+
+    case create_bucket_type(riak_admin_script) do
+      { :error, rsn } ->
+        { :error, rsn }
+      :ok ->
+        fun = fn socket ->
+          case Search.search_index_reload_all(socket) do
+            result when is_list(result) ->
+              if Enum.all?(result, fn { _, res } -> res == :ok end) do
+                :ok
+              else
+                { :error, Enum.filter(result, fn { _, res } -> res != :ok end) }
+              end
+            _ ->
+              { :error, :reload_search_indexes }
+          end
+        end
+
+        ## TODO: figure out a way to get repo
+        use_worker(nil, fun)
+    end
   end
 
-  def storage_down(opts) do
+  def storage_down(_opts) do
+    { :error, "Riak creates a bucket per Model, and cannot support dropping of keys without Model information" }
+  end
+
+  defp ensure_riak_admin_script!(path) do
+    unless File.exists?(path) do
+      raise Mix.Error, "#{path} is not a valid `riak-admin` executable. (Path must be absolute)"
+    end
+  end
+
+  defp create_bucket_type(script) do
+    ## Make commands
+    init_props = "{\"props\": {}}"
+    bucket_type = "ecto_search"
+    bucket_create = "#{script} bucket-type create #{bucket_type} #{init_props}"
+    bucket_activate = "#{script} bucket-type activate #{bucket_type}"
+
+    ## Attempt to create bucket
+    already_active = ~r" already_active\n$"i
+    create_success = ~r" created\n$"i
+    success_regex = [ create_success, already_active ]
+    
+    create_output = System.cmd(bucket_create)
+    if Enum.all?(success_regex, &Regex.match?(&1, create_output)) do
+
+      ## Attempt to activate bucket
+      activate_success = ~r" has been activated\n$"i
+      activate_output = System.cmd(bucket_activate)      
+      if Regex.match?(activate_success, activate_output) do
+        :ok
+      else
+        { :error, activate_output }
+      end
+      
+    else
+      { :error, create_output }
+    end
   end
   
   ## ----------------------------------------------------------------------
