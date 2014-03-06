@@ -401,10 +401,17 @@ defmodule Ecto.Adapters.Riak.Search do
   ## ----------------------------------------------------------------------
 
   @doc """
-  Creates and sets search indexes.
-  Called during Ecto.Adapters.Riak.start_link
-  and can be called manually to re-enforce search index changes.
+  Sets search indexes for all detected `Ecto.RiakModel` modules.
+  Called during Ecto.Adapters.Riak.start_link/2 or during the mix
+  task `mix ecto.create Your.Riak.Repo`
+
+  Note: this DOES NOT create and activate the Bucket Type needed for
+        operation of Yokozuna. Bucket Type creation and activation is
+        done manually via the mix task `mix ecto.create Your.Riak.Repo`
+        with functionality implemented in the
+        `Ecto.Adapters.Riak.storage_up/1` function
   """
+  @spec search_index_reload_all(pid) :: [{ atom, :ok | { :error, term } }]
   def search_index_reload_all(socket) do
     models = riak_models()
     Enum.map(models, fn model ->
