@@ -133,15 +133,6 @@ defmodule Ecto.Integration.TransactionTest do
     assert [] = TestRepo2.all(Trans)
   end
 
-  test "rollback with value" do
-    x = TestRepo1.transaction(fn ->
-      throw { :ecto_rollback, :foo }
-    end)
-
-    assert x == :foo
-    assert [] = TestRepo2.all(Trans)
-  end
-
   test "transactions are not shared in repo" do
     pid = self
 

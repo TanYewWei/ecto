@@ -38,7 +38,7 @@ defmodule Ecto.Integration.RepoTest do
 
     assert is_integer(id)
 
-    assert [Post.Entity[id: ^id, title: "The shiny new Ecto", text: "coming soon..."]] =
+    assert [Post.Entity[id: ^id, title: "The shiny new Ecto", text: "coming soon...", tags: ["1"]]] =
            TestRepo.all(Post)
   end
 
