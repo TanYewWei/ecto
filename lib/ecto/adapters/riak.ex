@@ -5,6 +5,8 @@ defmodule Ecto.Adapters.Riak do
   @bucket_name  "50"
   @bucket_type  "map"
   @put_options  [:return_body]
+
+  @timeout      5000
     
   alias Ecto.Adapters.Riak.AdapterStartError
   alias Ecto.Adapters.Riak.ETS
@@ -120,10 +122,10 @@ defmodule Ecto.Adapters.Riak do
   @doc """
   Fetchs all results from the data store based on the given query.
   """
-  @spec all(Ecto.Repo.t, Ecto.Query.t) :: [term] | no_return
-  def all(repo, query) do
+  @spec all(Ecto.Repo.t, Ecto.Query.t, Keyword.t) :: [term] | no_return
+  def all(repo, query, opts) do
     query = Normalizer.normalize(query)
-    { query_tuple, post_proc_fun } = Search.query(query)
+    { query_tuple, post_proc_fun } = Search.query(query, opts)
     { _, _, querystring, _ } = query_tuple
     
     if String.strip(querystring) == "" do
@@ -150,11 +152,12 @@ defmodule Ecto.Adapters.Riak do
   Stores a single new entity in the data store,
   and returns the newly stored value
   """
-  @spec create(repo, entity) :: entity
-  def create(repo, entity) do
+  @spec create(repo, entity, Keyword.t) :: entity
+  def create(repo, entity, opts) do
     entity = RiakObj.create_primary_key(entity)
     object = RiakObj.entity_to_object(entity)
-    fun = fn socket -> Riak.put(socket, object, @put_options) end
+    timeout = opts[:timeout] || @timeout
+    fun = fn socket -> Riak.put(socket, object, @put_options, timeout) end
     
     case use_worker(repo, fun) do
       { :ok, new_object } ->
@@ -168,10 +171,11 @@ defmodule Ecto.Adapters.Riak do
   Updates an entity using the primary key as key,
   returning a new entity.
   """
-  @spec update(repo, entity) :: integer
-  def update(repo, entity) do
+  @spec update(repo, entity, Keyword.t) :: integer
+  def update(repo, entity, opts) do
     object = RiakObj.entity_to_object(entity)
-    fun = &Riak.put(&1, object)
+    timeout = opts[:timeout] || @timeout
+    fun = &Riak.put(&1, object, timeout)
 
     case use_worker(repo, fun) do
       :ok -> 1
@@ -180,13 +184,14 @@ defmodule Ecto.Adapters.Riak do
   end
 
   @doc """
-  Updates all entities matching the given query with the values given. The
-  query will only have where expressions and a single from expression. Returns
-  the number of affected entities.
+  Updates all entities matching the given query with the values given.
+  The query will only have where expressions and a single from expression. 
+  Returns the number of affected entities.
   """
-  def update_all(repo, Query[] = query, values) do
+  @spec update_all(Ecto.Repo.t, Ecto.Query.t, Keyword.t, Keyword.t) :: integer
+  def update_all(repo, Query[] = query, values, opts) do
     query = Normalizer.normalize(query)
-    { query_tuple, post_proc_fun } = Search.query(query)
+    { query_tuple, post_proc_fun } = Search.query(query, opts)
 
     fun = fn socket ->
       case Search.execute(socket, query_tuple, post_proc_fun) do
@@ -212,11 +217,12 @@ defmodule Ecto.Adapters.Riak do
   @doc """
   Deletes an entity using the primary key as key.
   """
-  @spec delete(Ecto.Repo.t, Ecto.Entity.t) :: :ok
-  def delete(repo, entity) do
+  @spec delete(Ecto.Repo.t, Ecto.Entity.t, Keyword.t) :: :ok
+  def delete(repo, entity, opts) do
     bucket = RiakUtil.bucket(entity.model)
     key = entity.primary_key
-    fun = fn socket -> Riak.delete(socket, bucket, key) end
+    timeout = opts[:timeout] || @timeout
+    fun = fn socket -> Riak.delete(socket, bucket, key, timeout) end
     case use_worker(repo, fun) do
       :ok -> 1
       rsn -> rsn
@@ -228,9 +234,10 @@ defmodule Ecto.Adapters.Riak do
   where expressions and a single from expression. Returns the number of affected
   entities.
   """
-  def delete_all(repo, Query[] = query) do
+  @spec delete_all(Ecto.Repo.t, Ecto.Query.t, Keyword.t) :: integer
+  def delete_all(repo, Query[] = query, opts) do
     query = Normalizer.normalize(query)
-    { query_tuple, post_proc_fun } = Search.query(query)
+    { query_tuple, post_proc_fun } = Search.query(query, opts)
 
     fun = fn socket ->
       case Search.execute(socket, query_tuple, post_proc_fun) do

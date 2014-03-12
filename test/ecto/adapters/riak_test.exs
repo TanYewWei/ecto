@@ -4,9 +4,9 @@ defmodule Ecto.Adapters.RiakTest do
   defmodule Repo do
     use Ecto.Repo, adapter: Ecto.Adapters.Riak
 
-    def url do
-      [ "ecto://localhost:8100",
-        "ecto://localhost:8101" ]
+    def conf do
+      parse_url [ "ecto://localhost:8100",
+                  "ecto://localhost:8101" ]
     end
 
     test "stores pool_group metadata" do

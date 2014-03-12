@@ -1,7 +1,7 @@
 defmodule Ecto.Repo do
   @moduledoc """
   This module is used to define a repository. A repository maps to a data
-  store, for example an SQL database. A repository must implement `url/0` and
+  store, for example an SQL database. A repository must implement `conf/0` and
   set an adapter (see `Ecto.Adapter`) to be used for the repository.
 
   When used, the following options are allowed:
@@ -15,8 +15,8 @@ defmodule Ecto.Repo do
       defmodule MyRepo do
         use Ecto.Repo, adapter: Ecto.Adapters.Postgres
 
-        def url do
-          "ecto://postgres:postgres@localhost/postgres"
+        def conf do
+          parse_url "ecto://postgres:postgres@localhost/postgres"
         end
       end
 
@@ -26,13 +26,15 @@ defmodule Ecto.Repo do
       defmodule MyRepo do
         use Ecto.Repo, adapter: Ecto.Adapters.Postgres, env: Mix.env
 
-        def url(:dev),  do: "ecto://postgres:postgres@localhost/postgres_dev"
-        def url(:test), do: "ecto://postgres:postgres@localhost/postgres_test?size=1"
-        def url(:prod), do: "ecto://postgres:postgres@localhost/postgres_prod"
+        def conf(env), do: parse_url url(env)
+
+        defp url(:dev),  do: "ecto://postgres:postgres@localhost/postgres_dev"
+        defp url(:test), do: "ecto://postgres:postgres@localhost/postgres_test?size=1"
+        defp url(:prod), do: "ecto://postgres:postgres@localhost/postgres_prod"
       end
 
   Notice that, when using the environment, developers should implement
-  `url/1` which automatically passes the environment instead of `url/0`.
+  `conf/1` which automatically passes the environment instead of `conf/0`.
 
   Note the environment is only used at compilation time. That said, don't
   forget to set the `:build_per_environment` option to true in your Mix
@@ -55,10 +57,10 @@ defmodule Ecto.Repo do
       import Ecto.Utils, only: [app_dir: 2]
 
       if @env do
-        def url do
-          url(@env)
+        def conf do
+          conf(@env)
         end
-        defoverridable url: 0
+        defoverridable conf: 0
       end
 
       def start_link do
@@ -77,40 +79,45 @@ defmodule Ecto.Repo do
         Ecto.Repo.Backend.storage_down(__MODULE__, unquote(adapter))
       end
 
-      def get(queryable, id) do
-        Ecto.Repo.Backend.get(__MODULE__, unquote(adapter), queryable, id)
+      def get(queryable, id, opts \\ []) do
+        Ecto.Repo.Backend.get(__MODULE__, unquote(adapter), queryable, id, opts)
       end
 
-      def all(queryable) do
-        Ecto.Repo.Backend.all(__MODULE__, unquote(adapter), queryable)
+      def all(queryable, opts \\ []) do
+        Ecto.Repo.Backend.all(__MODULE__, unquote(adapter), queryable, opts)
       end
 
-      def create(entity) do
-        Ecto.Repo.Backend.create(__MODULE__, unquote(adapter), entity)
+      def create(entity, opts \\ []) do
+        Ecto.Repo.Backend.create(__MODULE__, unquote(adapter), entity, opts)
       end
 
-      def update(entity) do
-        Ecto.Repo.Backend.update(__MODULE__, unquote(adapter), entity)
+      def update(entity, opts \\ []) do
+        Ecto.Repo.Backend.update(__MODULE__, unquote(adapter), entity, opts)
       end
 
-      defmacro update_all(queryable, values) do
-        Ecto.Repo.Backend.update_all(__MODULE__, unquote(adapter), queryable, values)
+      defmacro update_all(queryable, values, opts \\ []) do
+        Ecto.Repo.Backend.update_all(__MODULE__, unquote(adapter), queryable,
+                                     values, opts)
       end
 
-      def delete(entity) do
-        Ecto.Repo.Backend.delete(__MODULE__, unquote(adapter), entity)
+      def delete(entity, opts \\ []) do
+        Ecto.Repo.Backend.delete(__MODULE__, unquote(adapter), entity, opts)
       end
 
-      def delete_all(queryable) do
-        Ecto.Repo.Backend.delete_all(__MODULE__, unquote(adapter), queryable)
+      def delete_all(queryable, opts \\ []) do
+        Ecto.Repo.Backend.delete_all(__MODULE__, unquote(adapter), queryable, opts)
       end
 
-      def transaction(fun) do
-        Ecto.Repo.Backend.transaction(__MODULE__, unquote(adapter), fun)
+      def transaction(opts \\ [], fun) do
+        Ecto.Repo.Backend.transaction(__MODULE__, unquote(adapter), opts, fun)
       end
 
       def rollback(value \\ nil) do
         Ecto.Repo.Backend.rollback(__MODULE__, unquote(adapter), value)
+      end
+
+      def parse_url(url) do
+        Ecto.Repo.Backend.parse_url(url)
       end
 
       def adapter do
@@ -134,12 +141,19 @@ defmodule Ecto.Repo do
   end
 
   @doc """
-  Should return the Ecto URL to be used for the repository. A URL is of the
-  following format: `ecto://username:password@hostname:port/database?opts=123`
-  where the `password`, `port` and `options` are optional. This function must be
-  implemented by the user.
+  Should return the database options that will be given to the adapter. Often
+  used in conjunction with `parse_url/1`. This  function must be implemented by
+  the user.
   """
-  defcallback url() :: String.t | [String.t]
+  defcallback conf() :: Keyword.t
+
+
+  @doc """
+  Parses an Ecto URL of the following format:
+  `ecto://username:password@hostname:port/database?opts=123` where the
+  `password`, `port` and `options` are optional.
+  """
+  defcallback parse_url(String.t) :: Keyword.t
 
   @doc """
   Starts any connection pooling or supervision and return `{ :ok, pid }`
@@ -180,13 +194,21 @@ defmodule Ecto.Repo do
   given id. Returns `nil` if no result was found. If the entity in the queryable
   has no primary key `Ecto.NoPrimaryKey` will be raised. `Ecto.AdapterError`
   will be raised if there is an adapter error.
+
+  ## Options
+    `:timeout` - The time in milliseconds to wait for the call to finish,
+                 `:infinity` will wait indefinitely (default: 5000);
   """
-  defcallback get(Ecto.Queryable.t, term) :: Ecto.Entity.t | nil | no_return
+  defcallback get(Ecto.Queryable.t, term, Keyword.t) :: Ecto.Entity.t | nil | no_return
 
   @doc """
   Fetches all results from the data store based on the given query. May raise
   `Ecto.QueryError` if query validation fails. `Ecto.AdapterError` will be
   raised if there is an adapter error.
+
+  ## Options
+    `:timeout` - The time in milliseconds to wait for the call to finish,
+                 `:infinity` will wait indefinitely (default: 5000);
 
   ## Example
 
@@ -195,23 +217,31 @@ defmodule Ecto.Repo do
            select: p.title
       MyRepo.all(query)
   """
-  defcallback all(Ecto.Query.t) :: [Ecto.Entity.t] | no_return
+  defcallback all(Ecto.Query.t, Keyword.t) :: [Ecto.Entity.t] | no_return
 
   @doc """
   Stores a single new entity in the data store and returns its stored
   representation. May raise `Ecto.AdapterError` if there is an adapter error.
+
+  ## Options
+    `:timeout` - The time in milliseconds to wait for the call to finish,
+                 `:infinity` will wait indefinitely (default: 5000);
 
   ## Example
 
       post = Post.new(title: "Ecto is great", text: "really, it is")
              |> MyRepo.create
   """
-  defcallback create(Ecto.Entity.t) :: Ecto.Entity.t | no_return
+  defcallback create(Ecto.Entity.t, Keyword.t) :: Ecto.Entity.t | no_return
 
   @doc """
   Updates an entity using the primary key as key. If the entity has no primary
   key `Ecto.NoPrimaryKey` will be raised. `Ecto.AdapterError` will be raised if
   there is an adapter error.
+
+  ## Options
+    `:timeout` - The time in milliseconds to wait for the call to finish,
+                 `:infinity` will wait indefinitely (default: 5000);
 
   ## Example
 
@@ -219,11 +249,15 @@ defmodule Ecto.Repo do
       post = post.title("New title")
       MyRepo.update(post)
   """
-  defcallback update(Ecto.Entity.t) :: :ok | no_return
+  defcallback update(Ecto.Entity.t, Keyword.t) :: :ok | no_return
 
   @doc """
   Updates all entities matching the given query with the given values.
   `Ecto.AdapterError` will be raised if there is an adapter error.
+
+  ## Options
+    `:timeout` - The time in milliseconds to wait for the call to finish,
+                 `:infinity` will wait indefinitely (default: 5000);
 
   ## Examples
 
@@ -234,23 +268,31 @@ defmodule Ecto.Repo do
       from(p in Post, where: p.id < 10)
       |> MyRepo.update_all(title: "New title")
   """
-  defmacrocallback update_all(Macro.t, Keyword.t) :: integer | no_return
+  defmacrocallback update_all(Macro.t, Keyword.t, Keyword.t) :: integer | no_return
 
   @doc """
   Deletes an entity using the primary key as key. If the entity has no primary
   key `Ecto.NoPrimaryKey` will be raised. `Ecto.AdapterError` will be raised if
   there is an adapter error.
 
+  ## Options
+    `:timeout` - The time in milliseconds to wait for the call to finish,
+                 `:infinity` will wait indefinitely (default: 5000);
+
   ## Example
 
       [post] = MyRepo.all(from(p in Post, where: p.id == 42))
       MyRepo.delete(post)
   """
-  defcallback delete(Ecto.Entity.t) :: :ok | no_return
+  defcallback delete(Ecto.Entity.t, Keyword.t) :: :ok | no_return
 
   @doc """
   Deletes all entities matching the given query with the given values.
   `Ecto.AdapterError` will be raised if there is an adapter error.
+
+  ## Options
+    `:timeout` - The time in milliseconds to wait for the call to finish,
+                 `:infinity` will wait indefinitely (default: 5000);
 
   ## Examples
 
@@ -258,7 +300,7 @@ defmodule Ecto.Repo do
 
       from(p in Post, where: p.id < 10) |> MyRepo.delete_all
   """
-  defcallback delete_all(Ecto.Queryable.t) :: integer | no_return
+  defcallback delete_all(Ecto.Queryable.t, Keyword.t) :: integer | no_return
 
   @doc """
   Runs the given function inside a transaction. If an unhandled error occurs the
@@ -268,6 +310,10 @@ defmodule Ecto.Repo do
   return the value given to `rollback!` as `{ :error, value }`. A successful
   transaction returns the value returned by the function wrapped in a tuple as
   `{ :ok, value }`. Transactions can be nested.
+
+  ## Options
+    `:timeout` - The time in milliseconds to wait for the call to finish,
+                 `:infinity` will wait indefinitely (default: 5000);
 
   ## Examples
 
@@ -295,7 +341,7 @@ defmodule Ecto.Repo do
       end)
 
   """
-  defcallback transaction(fun) :: { :ok, any } | { :error, any }
+  defcallback transaction(Keyword.t, fun) :: { :ok, any } | { :error, any }
 
   @doc """
   Rolls back the current transaction. See `rollback/1`.

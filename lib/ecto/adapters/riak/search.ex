@@ -68,10 +68,11 @@ defmodule Ecto.Adapters.Riak.Search do
   ## Constants
   ## ----------------------------------------------------------------------
 
-  @yz_bucket_key "_yz_rb"
-  @yz_riak_key   "_yz_rk"
-  @yz_id_key     "_yz_id"
-  @yz_meta_keys  [@yz_bucket_key, @yz_riak_key, @yz_id_key]  
+  @timeout        5000
+  @yz_bucket_key  "_yz_rb"
+  @yz_riak_key    "_yz_rk"
+  @yz_id_key      "_yz_id"
+  @yz_meta_keys   [ @yz_bucket_key, @yz_riak_key, @yz_id_key ]
 
   ## ----------------------------------------------------------------------
   ## API
@@ -110,8 +111,8 @@ defmodule Ecto.Adapters.Riak.Search do
   where post_proc_fun/1 should  be called on all results of
   the search query in the execute/3 function below.
   """        
-  @spec query(query) :: { query_tuple, post_proc_fun }
-  def query(Query[] = query) do
+  @spec query(query, Keyword.t) :: { query_tuple, post_proc_fun }
+  def query(Query[] = query, opts \\ []) do
     sources = create_names(query)  # :: [source]
     model = Util.model(query.from)
     search_index = RiakUtil.search_index(model)
@@ -132,7 +133,7 @@ defmodule Ecto.Adapters.Riak.Search do
     querystring = Enum.join([ where ])
     querystring = if querystring == "", do: "*:*", else: querystring 
     
-    options = List.flatten([ limit, offset ])
+    options = List.flatten([ limit, offset ] ++ opts)
       |> Enum.filter(&(nil != &1))
     query_part = { search_index, bucket, querystring, options }
 
@@ -180,12 +181,13 @@ defmodule Ecto.Adapters.Riak.Search do
   end
 
   defp execute_get(worker, query_tuple) do
-    { _, bucket, querystring, _ } = query_tuple
+    { _, bucket, querystring, opts } = query_tuple
     
     [_, key] = Regex.split(~r":", querystring)
     key = String.strip(key, hd ')')
     
-    case RiakSocket.get(worker, bucket, key) do
+    timeout = opts[:timeout] || @timeout
+    case RiakSocket.get(worker, bucket, key, timeout) do
       { :ok, object } ->        
         entity = Object.object_to_entity(object)
           |> Migration.migrate
@@ -197,7 +199,8 @@ defmodule Ecto.Adapters.Riak.Search do
 
   defp execute_search(worker, query_tuple, post_proc_fun) do
     { search_index, _, querystring, opts } = query_tuple
-    case RiakSocket.search(worker, search_index, querystring, opts) do      
+    timeout = opts[:timeout] || @timeout
+    case RiakSocket.search(worker, search_index, querystring, opts, timeout) do
       ## -----------------
       ## Got Search Result
       { :ok, search_result } ->

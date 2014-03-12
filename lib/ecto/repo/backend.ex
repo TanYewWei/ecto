@@ -11,23 +11,23 @@ defmodule Ecto.Repo.Backend do
   require Ecto.Query, as: Q
 
   def storage_up(repo, adapter) do
-    adapter.storage_up(parse_url(repo.url))
+    adapter.storage_up(repo.conf)
   end
 
   def storage_down(repo, adapter) do
-    adapter.storage_down(parse_url(repo.url))
+    adapter.storage_down(repo.conf)
   end
 
   def start_link(repo, adapter) do
     Enum.each(repo.query_apis, &Code.ensure_loaded(&1))
-    adapter.start_link(repo, parse_url(repo.url))
+    adapter.start_link(repo, repo.conf)
   end
 
   def stop(repo, adapter) do
     adapter.stop(repo)
   end
 
-  def get(repo, adapter, queryable, id) do
+  def get(repo, adapter, queryable, id, opts) do
     query       = Queryable.to_query(queryable)
     entity      = query.from |> Util.entity
     primary_key = entity.__entity__(:primary_key)
@@ -47,34 +47,34 @@ defmodule Ecto.Repo.Backend do
                    where: field(x, ^primary_key) == ^id,
                    limit: 1) |> Normalizer.normalize
 
-    case adapter.all(repo, query) do
+    case adapter.all(repo, query, opts) do
       [entity] -> entity
       [] -> nil
       _  -> raise Ecto.NotSingleResult, entity: entity
     end
   end
 
-  def all(repo, adapter, queryable) do
+  def all(repo, adapter, queryable, opts) do
     query = Queryable.to_query(queryable) |> Normalizer.normalize
     Validator.validate(query, repo.query_apis)
-    adapter.all(repo, query)
+    adapter.all(repo, query, opts)
   end
 
-  def create(repo, adapter, entity) do
+  def create(repo, adapter, entity, opts) do
     normalized_entity = normalize_entity(entity)
     validate_entity(normalized_entity)
-    adapter.create(repo, normalized_entity) |> entity.update
+    adapter.create(repo, normalized_entity, opts) |> entity.update
   end
 
-  def update(repo, adapter, entity) do
+  def update(repo, adapter, entity, opts) do
     entity = normalize_entity(entity)
     check_primary_key(entity)
     validate_entity(entity)
 
-    adapter.update(repo, entity) |> check_single_result(entity)
+    adapter.update(repo, entity, opts) |> check_single_result(entity)
   end
 
-  def update_all(repo, adapter, queryable, values) do
+  def update_all(repo, adapter, queryable, values, opts) do
     { binds, expr } = FromBuilder.escape(queryable)
 
     values = Enum.map(values, fn({ field, expr }) ->
@@ -83,33 +83,33 @@ defmodule Ecto.Repo.Backend do
     end)
 
     quote do
-      Ecto.Repo.Backend.runtime_update_all(unquote(repo),
-        unquote(adapter), unquote(expr), unquote(values))
+      Ecto.Repo.Backend.runtime_update_all(unquote(repo), unquote(adapter),
+        unquote(expr), unquote(values), unquote(opts))
     end
   end
 
-  def runtime_update_all(repo, adapter, queryable, values) do
+  def runtime_update_all(repo, adapter, queryable, values, opts) do
     query = Queryable.to_query(queryable) |> Normalizer.normalize(skip_select: true)
     Validator.validate_update(query, repo.query_apis, values)
-    adapter.update_all(repo, query, values)
+    adapter.update_all(repo, query, values, opts)
   end
 
-  def delete(repo, adapter, entity) do
+  def delete(repo, adapter, entity, opts) do
     entity = normalize_entity(entity)
     check_primary_key(entity)
     validate_entity(entity)
 
-    adapter.delete(repo, entity) |> check_single_result(entity)
+    adapter.delete(repo, entity, opts) |> check_single_result(entity)
   end
 
-  def delete_all(repo, adapter, queryable) do
+  def delete_all(repo, adapter, queryable, opts) do
     query = Queryable.to_query(queryable) |> Normalizer.normalize(skip_select: true)
     Validator.validate_delete(query, repo.query_apis)
-    adapter.delete_all(repo, query)
+    adapter.delete_all(repo, query, opts)
   end
 
-  def transaction(repo, adapter, fun) when is_function(fun, 0) do
-    adapter.transaction(repo, fun)
+  def transaction(repo, adapter, opts, fun) when is_function(fun, 0) do
+    adapter.transaction(repo, opts, fun)
   end
 
 
@@ -119,11 +119,11 @@ defmodule Ecto.Repo.Backend do
     adapter.rollback(repo, value)
   end
 
-  defp parse_url(urls) when is_list(urls) do
+  def parse_url(urls) when is_list(urls) do
     Enum.map(urls, &parse_url/1)
   end
 
-  defp parse_url(url) do
+  def parse_url(url) do
     unless String.match? url, ~r/^[^:\/?#\s]+:\/\// do
       raise Ecto.InvalidURL, url: url, reason: "url should start with a scheme, host should start with //"
     end
@@ -151,6 +151,8 @@ defmodule Ecto.Repo.Backend do
 
     opts ++ query
   end  
+
+  ## Helpers
 
   defp atomize_keys(dict) do
     Enum.map dict, fn({ k, v }) -> { binary_to_atom(k), v } end

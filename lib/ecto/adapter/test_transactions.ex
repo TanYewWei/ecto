@@ -17,8 +17,8 @@ defmodule Ecto.Adapter.TestTransactions  do
 
         # When testing it is important to set `size=1&max_overflow=0` so that
         # the repo will only have one connection
-        def url do
-          "ecto://postgres:postgres@localhost/test?size=1&max_overflow=0"
+        def conf do
+          parse_url "ecto://postgres:postgres@localhost/test?size=1&max_overflow=0"
         end
       end
 
@@ -47,10 +47,10 @@ defmodule Ecto.Adapter.TestTransactions  do
   @doc """
   Starts a test transaction, see example above for usage.
   """
-  defcallback begin_test_transaction(Ecto.Repo.t) :: :ok | no_return
+  defcallback begin_test_transaction(Ecto.Repo.t, Keyword.t) :: :ok | no_return
 
   @doc """
   Ends a test transaction, see example above for usage.
   """
-  defcallback rollback_test_transaction(Ecto.Repo.t) :: :ok | no_return
+  defcallback rollback_test_transaction(Ecto.Repo.t, Keyword.t) :: :ok | no_return
 end
